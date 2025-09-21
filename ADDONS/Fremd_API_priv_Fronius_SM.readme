@@ -1,13 +1,13 @@
 # Vorbereite Datei um ein durch OpenDTU simuliertes Smartmeter einzubinden
 # Zum aktivieren muss die Datei in 'Fremd_API_priv.py' umbenannt werden
-# komentierte Zeilen müssen angepasst werden
+# kommentierte Zeilen müssen gegebenenfalls angepasst werden
 
 import FUNCTIONS.functions
 import requests
 import json
 
 def get_API():
-    gen24url = "http://192.168.178.111/components/readable"                                                  # hier IP Adresse des Fronius Gen24 eintragen
+    gen24url = "http://192.168.178.111/components/readable"                                                  # hier die IP Adresse des Fronius Gen24 eintragen
     url = requests.get(gen24url)
     text = url.text
     data = json.loads(text)
