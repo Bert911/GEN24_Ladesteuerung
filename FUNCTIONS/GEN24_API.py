@@ -190,7 +190,7 @@ class gen24api:
         import traceback
         try:
             from ADDONS.Fremd_API_priv import FremdAPI
-# mit data werden die API-Daten des erste GEN24 übergeben
+            # mit data werden die API-Daten des erste GEN24 übergeben
             fremd = FremdAPI()
             API_ADDDON = fremd.get_API(data)
             for key in API:
