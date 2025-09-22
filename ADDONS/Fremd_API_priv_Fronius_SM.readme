@@ -11,8 +11,8 @@ class FremdAPI:
 
     def get_API(self,data):
         sm_id = "16252931"                                                                                     # ID des Smartmeters eintragen
-        print("\nvorherigeProduktionSM: ", self.API_SM_MEAN_alt)
-        print("\nvorherigeProduktionSM: ", self.API_SM_SUM_berechnet)
+        print("\nvorherigeLeistungSM: ", self.API_SM_MEAN_alt)
+        print("\nvorherigeEnergieSM: ", self.API_SM_SUM_berechnet)
 
         try:
             API_SM_MEAN = data['Body']['Data'][sm_id]['channels']['SMARTMETER_POWERACTIVE_MEAN_SUM_F64']
@@ -36,7 +36,7 @@ class FremdAPI:
         self.Fremd_API['DC_Produktion'] = int(API_SM_SUM*1.05)                                                        # Wirkungsgrad kann hier angepasst werden
 
         print("\naktuelleProduktionSM: ", self.Fremd_API['aktuellePVProduktion'])
-        print("SummeProduziertSM: ", self.Fremd_API['AC_Produktion'], "\n")
+        print("SummeEnergieSM: ", self.Fremd_API['AC_Produktion'], "\n")
 
         return self.Fremd_API
 
