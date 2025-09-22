@@ -189,8 +189,10 @@ class gen24api:
         # Hier individuelles Skript Fremd_API_priv.py aus ADDONS aufrufen und Werte addieren
         import traceback
         try:
-            import ADDONS.Fremd_API_priv
-            API_ADDDON = ADDONS.Fremd_API_priv.get_API()
+            from ADDONS.Fremd_API_priv import FremdAPI
+# mit data werden die API-Daten des erste GEN24 übergeben
+            fremd = FremdAPI()
+            API_ADDDON = fremd.get_API(data)
             for key in API:
                 if key in API_ADDDON:
                     API[key] += API_ADDDON[key]
