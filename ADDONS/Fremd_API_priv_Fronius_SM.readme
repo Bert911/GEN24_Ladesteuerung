@@ -5,14 +5,14 @@
 class FremdAPI:
     def __init__(self):
         self.API_SM_MEAN_alt = None
-        self.API_SM_SUM_alt = None
+        self.API_SM_SUM_berechnet = None
         self.API_SM_SUM_alt2 = None
         self.Fremd_API = {}
 
     def get_API(self,data):
         sm_id = "16252931"                                                                                     # ID des Smartmeters eintragen
         print("\naktuelleProduktionSM: ", self.API_SM_MEAN_alt)
-        print("\naktuelleProduktionSM: ", self.API_SM_SUM_alt)
+        print("\naktuelleProduktionSM: ", self.API_SM_SUM_berechnet)
 
         try:
             API_SM_MEAN = data['Body']['Data'][sm_id]['channels']['SMARTMETER_POWERACTIVE_MEAN_SUM_F64']
@@ -20,13 +20,17 @@ class FremdAPI:
         except  KeyError:
             print("\nLesefehler DTU")
             return {}
+
+        if self.API_SM_MEAN_alt is not None and API_SM_MEAN == self.API_SM_MEAN_alt:
+            print("\nkeine neuen Produktions Daten")
         if self.API_SM_SUM_alt2 is not None and API_SM_SUM == self.API_SM_SUM_alt2:
-            if self.API_SM_SUM_alt is not None:
-                API_SM_SUM = self.API_SM_SUM_alt + API_SM_MEAN/6
+            if self.API_SM_SUM_berechnet is not None:
+                API_SM_SUM = self.API_SM_SUM_berechnet + API_SM_MEAN / 6
+                print("\nkeine neuen Energie Daten")
         else:
             self.API_SM_SUM_alt2 = API_SM_SUM
-        self.API_SM_SUM_alt = API_SM_SUM
 
+        self.API_SM_SUM_berechnet = API_SM_SUM
         self.Fremd_API['aktuellePVProduktion'] = int(API_SM_MEAN)
         self.Fremd_API['AC_Produktion'] = int(API_SM_SUM)
         self.Fremd_API['DC_Produktion'] = int(API_SM_SUM*1.05)                                                        # Wirkungsgrad kann hier angepasst werden
