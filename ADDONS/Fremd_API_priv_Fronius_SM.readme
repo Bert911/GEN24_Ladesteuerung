@@ -35,6 +35,11 @@ def get_API(data):
     Liest die Smartmeter-Daten aus und berechnet aktuelle Produktion und Energie.
     Persistiert Werte zwischen Crontab-Läufen.
     """
+
+    print("\nAPI_SM_MEAN_alt: ", API_SM_MEAN_alt)
+    print("\nAPI_SM_MEAN_alt: ", API_SM_SUM_berechnet)
+    print("\nAPI_SM_SUM_alt2: ", API_SM_SUM_alt2, "\n")
+
     sm_id = "16252931"  # ID des Smartmeters eintragen
     state = load_state()
 
