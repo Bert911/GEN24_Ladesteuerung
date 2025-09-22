@@ -2,28 +2,39 @@
 # Zum aktivieren muss die Datei in 'Fremd_API_priv.py' umbenannt werden
 # kommentierte Zeilen müssen gegebenenfalls angepasst werden
 
-import FUNCTIONS.functions
-import requests
-import json
+class FremdAPI:
+    def __init__(self):
+        self.API_SM_MEAN_alt = None
+        self.API_SM_SUM_alt = None
+        self.API_SM_SUM_alt2 = None
+        self.Fremd_API = {}
 
-def get_API():
-    gen24url = "http://192.168.178.111/components/readable"                                                  # hier die IP Adresse des Fronius Gen24 eintragen
-    url = requests.get(gen24url)
-    text = url.text
-    data = json.loads(text)
-    Fremd_API = {}
+    def get_API(self,data):
+        sm_id = "16252931"                                                                                     # ID des Smartmeters eintragen
+        print("\naktuelleProduktionSM: ", self.API_SM_MEAN_alt)
+        print("\naktuelleProduktionSM: ", self.API_SM_SUM_alt)
 
-    API_SM_MEAN = data['Body']['Data']['16252931']['channels']['SMARTMETER_POWERACTIVE_MEAN_SUM_F64']        # ID des Smartmeters eintragen
-    Fremd_API['aktuellePVProduktion'] = int(API_SM_MEAN)
+        try:
+            API_SM_MEAN = data['Body']['Data'][sm_id]['channels']['SMARTMETER_POWERACTIVE_MEAN_SUM_F64']
+            API_SM_SUM = data['Body']['Data'][sm_id]['channels']['SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64']
+        except  KeyError:
+            print("\nLesefehler DTU")
+            return {}
+        if self.API_SM_SUM_alt2 is not None and API_SM_SUM == self.API_SM_SUM_alt2:
+            if self.API_SM_SUM_alt is not None:
+                API_SM_SUM = self.API_SM_SUM_alt + API_SM_MEAN/6
+        else:
+            self.API_SM_SUM_alt2 = API_SM_SUM
+        self.API_SM_SUM_alt = API_SM_SUM
 
-    API_SM_SUM = data['Body']['Data']['16252931']['channels']['SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64']    # ID des Smartmeters eintragen
-    Fremd_API['AC_Produktion'] = int(API_SM_SUM)
-    Fremd_API['DC_Produktion'] = int(API_SM_SUM*1.05)                                                        # Wirkungsgrad kann hier angepasst werden
+        self.Fremd_API['aktuellePVProduktion'] = int(API_SM_MEAN)
+        self.Fremd_API['AC_Produktion'] = int(API_SM_SUM)
+        self.Fremd_API['DC_Produktion'] = int(API_SM_SUM*1.05)                                                        # Wirkungsgrad kann hier angepasst werden
 
-    print("\naktuelleProduktionSM: ", Fremd_API['aktuellePVProduktion'])
-    print("SummeProduziertSM: ", Fremd_API['AC_Produktion'], "\n")
+        print("\naktuelleProduktionSM: ", self.Fremd_API['aktuellePVProduktion'])
+        print("SummeProduziertSM: ", self.Fremd_API['AC_Produktion'], "\n")
 
-    return(Fremd_API)
+        return self.Fremd_API
 
 
 # Werte mit folgenden API-Schlüssel können übergeben werden
