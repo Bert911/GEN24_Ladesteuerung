@@ -11,8 +11,8 @@ class FremdAPI:
 
     def get_API(self,data):
         sm_id = "16252931"                                                                                     # ID des Smartmeters eintragen
-        print("\naktuelleProduktionSM: ", self.API_SM_MEAN_alt)
-        print("\naktuelleProduktionSM: ", self.API_SM_SUM_berechnet)
+        print("\nvorherigeProduktionSM: ", self.API_SM_MEAN_alt)
+        print("\nvorherigeProduktionSM: ", self.API_SM_SUM_berechnet)
 
         try:
             API_SM_MEAN = data['Body']['Data'][sm_id]['channels']['SMARTMETER_POWERACTIVE_MEAN_SUM_F64']
