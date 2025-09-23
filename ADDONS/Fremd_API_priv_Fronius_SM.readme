@@ -35,8 +35,8 @@ def get_API(data):
     state = load_state()
     now = datetime.now()
 
-    # Zähler um Mitternacht zurücksetzen
-    if now.hour == 0 and now.minute < 10:  # innerhalb der ersten Cron-Läufe nach 00:00
+    # Zähler zwischen 00:05 und 00:25 zurücksetzen
+    if now.hour == 0 and 5 <= now.minute <= 25:
         for sm_id in SMARTMETER_IDS:
             state[sm_id]["stale_count"] = 0
         print("Tagesreset: Stale-Counter auf 0 gesetzt")
