@@ -1,74 +1,86 @@
+import json
+import os
+from datetime import datetime
+
+SAVE_FILE = os.path.join(os.path.dirname(__file__), "FremdAPI_last.json")
+
+SMARTMETER_IDS = ["16252931", "16711683"]  # IDs der Smartmeter
+
+def load_state():
+    if os.path.exists(SAVE_FILE):
+        try:
+            with open(SAVE_FILE, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Laden der alten Werte fehlgeschlagen: {e}")
+    # Standardwerte
+    return {
+        sm_id: {
+            "MEAN_alt": 0,
+            "SUM_berechnet": 0,
+            "SUM_alt2": 0,
+            "stale_count": 0
+        }
+        for sm_id in SMARTMETER_IDS
+    }
+
+def save_state(state):
+    try:
+        with open(SAVE_FILE, "w") as f:
+            json.dump(state, f)
+    except Exception as e:
+        print(f"Speichern der Werte fehlgeschlagen: {e}")
+
 def get_API(data):
     state = load_state()
+    now = datetime.now()
+
+    # Zähler um Mitternacht zurücksetzen
+    if now.hour == 0 and now.minute < 10:  # innerhalb der ersten Cron-Minuten nach 00:00
+        for sm_id in SMARTMETER_IDS:
+            state[sm_id]["stale_count"] = 0
+        print("Tagesreset: Stale-Counter auf 0 gesetzt")
 
     total_mean = 0.0
     total_sum = 0.0
 
     for sm_id in SMARTMETER_IDS:
-        # Sicherstellen, dass state für diese ID existiert
         if sm_id not in state:
-            state[sm_id] = {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0}
+            state[sm_id] = {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
 
-        print(f"\n--- Vorherige Werte SM {sm_id} ---")
-        print("MEAN_alt:", state[sm_id]["MEAN_alt"])
-        print("SUM_berechnet:", state[sm_id]["SUM_berechnet"])
-        print("SUM_alt2:", state[sm_id]["SUM_alt2"])
-
-        # Daten lesen
         try:
             channels = data['Body']['Data'][sm_id]['channels']
             API_SM_MEAN = float(channels['SMARTMETER_POWERACTIVE_MEAN_SUM_F64'])
             API_SM_SUM = float(channels['SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64'])
         except KeyError:
-            print(f"Lesefehler DTU: Smartmeter {sm_id} nicht gefunden — Überspringe")
+            print(f"SM {sm_id}: nicht erreichbar")
             continue
 
-        # Standard: verwende den gelesenen rohen Wert
         API_SM_SUM_used = API_SM_SUM
-        update_state = True  # Flag: soll state mit neuen Werten überschrieben werden?
+        update_state = True
 
-        # 1) Wenn roher API-Wert == 0 und vorher bereits eine berechnete Summe vorhanden ist,
-        #    dann behalten wir die vorherige (nicht-0) berechnete Summe bei.
-        if API_SM_SUM == 0 and state[sm_id]["SUM_berechnet"] != 0:
-            print(f"SM {sm_id}: roher Zähler 0, behalte vorherige SUM_berechnet = {state[sm_id]['SUM_berechnet']}")
-            API_SM_SUM_used = state[sm_id]["SUM_berechnet"]
-            update_state = False  # kein Überschreiben mit 0 (auch SUM_alt2 nicht überschreiben)
-
+        # Unveränderter Wert → nur zwischen 8 und 18 Uhr zählen
+        if API_SM_SUM == state[sm_id]["SUM_alt2"]:
+            if 8 <= now.hour < 18:
+                state[sm_id]["stale_count"] += 1
+                print(f"SM {sm_id}: unverändert, Zähler = {state[sm_id]['stale_count']}")
+            # Fortschreiben, wenn schon ein alter Wert existiert
+            if state[sm_id]["SUM_berechnet"] != 0:
+                API_SM_SUM_used = state[sm_id]["SUM_berechnet"] + (API_SM_MEAN / 6.0)
         else:
-            # 2) Wenn roher Zähler gleich dem vorherigen rohen Zähler (unverändert),
-            #    dann versuchen wir, die berechnete Summe fortzuschreiben (nur wenn vorher vorhanden).
-            if API_SM_SUM == state[sm_id]["SUM_alt2"]:
-                if state[sm_id]["SUM_berechnet"] != 0:
-                    API_SM_SUM_used = state[sm_id]["SUM_berechnet"] + (API_SM_MEAN / 6.0)
-                    print(f"SM {sm_id}: Zähler unverändert -> berechnete Summe aktualisiert zu {API_SM_SUM_used}")
-                else:
-                    # keine vorherige berechnete Summe -> behalten wir den rohen Wert (evtl. 0)
-                    API_SM_SUM_used = API_SM_SUM
+            state[sm_id]["stale_count"] = 0  # zurücksetzen, sobald neuer Wert da ist
 
-            # Bei normalem, neuen rohen Zähler: API_SM_SUM_used bleibt API_SM_SUM (wie oben)
-
-        # Summiere für Gesamtergebnis
         total_mean += API_SM_MEAN
         total_sum += API_SM_SUM_used
 
-        # State-Update: nur überschreiben wenn update_state True (d.h. nicht bei "roher 0, aber vorher nicht 0")
         if update_state:
             state[sm_id]["MEAN_alt"] = API_SM_MEAN
             state[sm_id]["SUM_berechnet"] = API_SM_SUM_used
-            # SUM_alt2 nur mit dem rohen Wert überschreiben, falls roher Wert != 0
             if API_SM_SUM != 0:
                 state[sm_id]["SUM_alt2"] = API_SM_SUM
-            else:
-                # roher Wert 0: lasse SUM_alt2 unverändert (damit kein Überschreiben mit 0)
-                pass
-        else:
-            # Wenn wir nicht updaten, behalten wir die alten state-Werte unverändert.
-            pass
 
-    # state persistieren
     save_state(state)
 
-    # Rückgabe
     Fremd_API = {
         'aktuellePVProduktion': int(total_mean),
         'AC_Produktion': int(total_sum),
