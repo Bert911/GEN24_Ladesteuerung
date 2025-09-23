@@ -36,7 +36,7 @@ def get_API(data):
     now = datetime.now()
 
     # Zähler um Mitternacht zurücksetzen
-    if now.hour == 0 and now.minute < 10:  # innerhalb der ersten Cron-Minuten nach 00:00
+    if now.hour == 0 and now.minute < 10:  # innerhalb der ersten Cron-Läufe nach 00:00
         for sm_id in SMARTMETER_IDS:
             state[sm_id]["stale_count"] = 0
         print("Tagesreset: Stale-Counter auf 0 gesetzt")
@@ -57,27 +57,28 @@ def get_API(data):
             continue
 
         API_SM_SUM_used = API_SM_SUM
-        update_state = True
 
-        # Unveränderter Wert → nur zwischen 8 und 18 Uhr zählen
+        # Wenn Summenwert unverändert ist → hochzählen (nur tagsüber)
         if API_SM_SUM == state[sm_id]["SUM_alt2"]:
             if 8 <= now.hour < 18:
                 state[sm_id]["stale_count"] += 1
                 print(f"SM {sm_id}: unverändert, Zähler = {state[sm_id]['stale_count']}")
-            # Fortschreiben, wenn schon ein alter Wert existiert
+            # Fortschreiben, wenn alter Wert existiert
             if state[sm_id]["SUM_berechnet"] != 0:
                 API_SM_SUM_used = state[sm_id]["SUM_berechnet"] + (API_SM_MEAN / 6.0)
         else:
-            state[sm_id]["stale_count"] = 0  # zurücksetzen, sobald neuer Wert da ist
+            state[sm_id]["stale_count"] = 0  # zurücksetzen bei neuem Wert
+
+        # Summenwert nur übernehmen, wenn er größer als der alte ist
+        if API_SM_SUM > state[sm_id]["SUM_alt2"]:
+            state[sm_id]["SUM_alt2"] = API_SM_SUM
+
+        # Zustand aktualisieren
+        state[sm_id]["MEAN_alt"] = API_SM_MEAN
+        state[sm_id]["SUM_berechnet"] = API_SM_SUM_used
 
         total_mean += API_SM_MEAN
         total_sum += API_SM_SUM_used
-
-        if update_state:
-            state[sm_id]["MEAN_alt"] = API_SM_MEAN
-            state[sm_id]["SUM_berechnet"] = API_SM_SUM_used
-            if API_SM_SUM != 0:
-                state[sm_id]["SUM_alt2"] = API_SM_SUM
 
     save_state(state)
 
