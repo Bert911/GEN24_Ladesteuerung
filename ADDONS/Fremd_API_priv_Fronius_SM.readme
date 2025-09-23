@@ -4,7 +4,7 @@ from datetime import datetime
 
 SAVE_FILE = os.path.join(os.path.dirname(__file__), "FremdAPI_last.json")
 
-SMARTMETER_IDS = ["16252931", "16711683"]  # IDs der Smartmeter
+SMARTMETER_IDS = ["16252931", "16711682"]  # IDs der Smartmeter
 
 def load_state():
     if os.path.exists(SAVE_FILE):
