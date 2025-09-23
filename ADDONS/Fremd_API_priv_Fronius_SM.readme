@@ -1,29 +1,33 @@
-# Vorbereite Datei um ein durch OpenDTU simuliertes Smartmeter einzubinden
-# Zum aktivieren muss die Datei in 'Fremd_API_priv.py' umbenannt werden
-# kommentierte Zeilen müssen gegebenenfalls angepasst werden
 import json
 import os
 
 # Datei für persistente Werte
 SAVE_FILE = os.path.join(os.path.dirname(__file__), "FremdAPI_last.json")
 
+# Hier alle Smartmeter-IDs eintragen
+SMARTMETER_IDS = [
+    "16252931",  # Smartmeter 1
+    "16711683"   # Smartmeter 2
+]
+
 def load_state():
-    """Lädt alte Werte aus der JSON-Datei oder gibt Standardwerte zurück."""
     if os.path.exists(SAVE_FILE):
         try:
             with open(SAVE_FILE, "r") as f:
                 return json.load(f)
         except Exception as e:
             print(f"Laden der alten Werte fehlgeschlagen: {e}")
-    # Standardwerte, falls Datei fehlt oder fehlerhaft
+    # Standardwerte für alle Smartmeter anlegen
     return {
-        "API_SM_MEAN_alt": 0,
-        "API_SM_SUM_berechnet": 0,
-        "API_SM_SUM_alt2": 0
+        sm_id: {
+            "MEAN_alt": 0,
+            "SUM_berechnet": 0,
+            "SUM_alt2": 0
+        }
+        for sm_id in SMARTMETER_IDS
     }
 
 def save_state(state):
-    """Speichert aktuelle Werte in die JSON-Datei."""
     try:
         with open(SAVE_FILE, "w") as f:
             json.dump(state, f)
@@ -31,62 +35,51 @@ def save_state(state):
         print(f"Speichern der Werte fehlgeschlagen: {e}")
 
 def get_API(data):
-    """
-    Liest die Smartmeter-Daten aus und berechnet aktuelle Produktion und Energie.
-    Persistiert Werte zwischen Crontab-Läufen.
-    """
-    sm_id = "16252931"  # ID des Smartmeters eintragen
     state = load_state()
 
-    print("\nAPI_SM_MEAN_alt: ", state["API_SM_MEAN_alt"])
-    print("API_SM_SUM_berechnet: ", state["API_SM_SUM_berechnet"])
-    print("API_SM_SUM_alt2: ", state["API_SM_SUM_alt2"], "\n")
+    total_mean = 0
+    total_sum = 0
 
-    try:
-        channels = data['Body']['Data'][sm_id]['channels']
-        API_SM_MEAN = channels['SMARTMETER_POWERACTIVE_MEAN_SUM_F64']
-        API_SM_SUM = channels['SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64']
-    except KeyError:
-        print("Lesefehler DTU: Smartmeter-Daten nicht gefunden")
-        return {}
+    for sm_id in SMARTMETER_IDS:
+        print(f"\n--- Vorherige Werte SM {sm_id} ---")
+        print("MEAN_alt:", state[sm_id]["MEAN_alt"])
+        print("SUM_berechnet:", state[sm_id]["SUM_berechnet"])
+        print("SUM_alt2:", state[sm_id]["SUM_alt2"])
 
-    # Vergleich und Berechnung
-    if API_SM_MEAN == state["API_SM_MEAN_alt"]:
-        print("keine neuen Produktionsdaten")
-    if API_SM_SUM == state["API_SM_SUM_alt2"]:
-        API_SM_SUM = state["API_SM_SUM_berechnet"] + API_SM_MEAN / 6
-        print("keine neuen Energiedaten")
+        try:
+            channels = data['Body']['Data'][sm_id]['channels']
+            API_SM_MEAN = channels['SMARTMETER_POWERACTIVE_MEAN_SUM_F64']
+            API_SM_SUM = channels['SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64']
+        except KeyError:
+            print(f"Lesefehler DTU: Smartmeter {sm_id} nicht gefunden")
+            continue  # Überspringen, falls ein Zähler fehlt
 
-    # Rückgabe-Werte
-    Fremd_API = {
-        'aktuellePVProduktion': int(API_SM_MEAN),
-        'AC_Produktion': int(API_SM_SUM),
-        'DC_Produktion': int(API_SM_SUM * 1.05)
-    }
+        # Vergleich und Berechnung
+        if API_SM_MEAN == state[sm_id]["MEAN_alt"]:
+            print("keine neuen Produktionsdaten")
+        if API_SM_SUM == state[sm_id]["SUM_alt2"]:
+            API_SM_SUM = state[sm_id]["SUM_berechnet"] + API_SM_MEAN / 6
+            print("keine neuen Energiedaten")
 
-    # Status aktualisieren und speichern
-    state["API_SM_MEAN_alt"] = API_SM_MEAN
-    state["API_SM_SUM_berechnet"] = API_SM_SUM
-    state["API_SM_SUM_alt2"] = channels['SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64']
+        # Summen für Gesamtergebnis
+        total_mean += API_SM_MEAN
+        total_sum += API_SM_SUM
+
+        # Status aktualisieren
+        state[sm_id]["MEAN_alt"] = API_SM_MEAN
+        state[sm_id]["SUM_berechnet"] = API_SM_SUM
+        state[sm_id]["SUM_alt2"] = API_SM_SUM
+
     save_state(state)
 
-    print("\naktuelleProduktionSM:", Fremd_API['aktuellePVProduktion'])
-    print("SummeEnergieSM:", Fremd_API['AC_Produktion'], "\n")
+    # Rückgabe
+    Fremd_API = {
+        'aktuellePVProduktion': int(total_mean),
+        'AC_Produktion': int(total_sum),
+        'DC_Produktion': int(total_sum * 1.05)
+    }
+
+    print("\nGesamtProduktionSM:", Fremd_API['aktuellePVProduktion'])
+    print("GesamtEnergieSM:", Fremd_API['AC_Produktion'], "\n")
 
     return Fremd_API
-
-# Werte mit folgenden API-Schlüssel können übergeben werden
-# ['BattganzeKapazWatt']
-# ['BattganzeLadeKapazWatt']
-# ['BattStatusProz']
-# ['BattKapaWatt_akt']
-# ['aktuelleEinspeisung']
-# ['aktuellePVProduktion']
-# ['aktuelleBatteriePower']
-# ['AC_Produktion']
-# ['DC_Produktion']
-# ['AC_to_DC']
-# ['Batterie_IN']
-# ['Batterie_OUT']
-# ['Netzverbrauch']
-# ['Einspeisung']
