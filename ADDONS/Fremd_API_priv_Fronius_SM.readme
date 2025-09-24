@@ -67,16 +67,12 @@ def get_API(data):
         API_SM_SUM_used = API_SM_SUM
 
         # Wenn Summenwert unverändert ist → hochzählen (nur tagsüber)
-        if API_SM_SUM == state[sm_id]["SUM_alt2"]:
+        if API_SM_SUM <= state[sm_id]["SUM_alt2"]:
             if 8 <= now.hour < 18:
                 state[sm_id]["stale_count"] += 1
                 print(f"SM {sm_id}: unverändert, Zähler = {state[sm_id]['stale_count']}")
             if state[sm_id]["SUM_berechnet"] != 0:
                 API_SM_SUM_used = state[sm_id]["SUM_berechnet"] + (API_SM_MEAN // 6)
-
-        # Neue Logik: nur übernehmen, wenn größer
-        if API_SM_SUM <= state[sm_id]["SUM_alt2"]:
-            API_SM_SUM_used = state[sm_id]["SUM_berechnet"]
         else:
             state[sm_id]["SUM_alt2"] = API_SM_SUM
 
