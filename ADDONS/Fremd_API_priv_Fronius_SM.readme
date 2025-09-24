@@ -6,6 +6,7 @@ SAVE_FILE = os.path.join(os.path.dirname(__file__), "FremdAPI_last.json")
 
 SMARTMETER_IDS = ["16252931", "16711682"]  # IDs der Smartmeter
 
+
 def load_state():
     if os.path.exists(SAVE_FILE):
         try:
@@ -24,12 +25,14 @@ def load_state():
         for sm_id in SMARTMETER_IDS
     }
 
+
 def save_state(state):
     try:
         with open(SAVE_FILE, "w") as f:
             json.dump(state, f)
     except Exception as e:
         print(f"Speichern der Werte fehlgeschlagen: {e}")
+
 
 def get_API(data):
     state = load_state()
@@ -41,17 +44,22 @@ def get_API(data):
             state[sm_id]["stale_count"] = 0
         print("Tagesreset: Stale-Counter auf 0 gesetzt")
 
-    total_mean = 0.0
-    total_sum = 0.0
+    total_mean = 0
+    total_sum = 0
 
     for sm_id in SMARTMETER_IDS:
         if sm_id not in state:
-            state[sm_id] = {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
+            state[sm_id] = {
+                "MEAN_alt": 0,
+                "SUM_berechnet": 0,
+                "SUM_alt2": 0,
+                "stale_count": 0
+            }
 
         try:
             channels = data['Body']['Data'][sm_id]['channels']
-            API_SM_MEAN = float(channels['SMARTMETER_POWERACTIVE_MEAN_SUM_F64'])
-            API_SM_SUM = float(channels['SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64'])
+            API_SM_MEAN = int(channels['SMARTMETER_POWERACTIVE_MEAN_SUM_F64'])
+            API_SM_SUM = int(channels['SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64'])
         except KeyError:
             print(f"SM {sm_id}: nicht erreichbar")
             continue
@@ -64,13 +72,15 @@ def get_API(data):
                 state[sm_id]["stale_count"] += 1
                 print(f"SM {sm_id}: unverändert, Zähler = {state[sm_id]['stale_count']}")
             if state[sm_id]["SUM_berechnet"] != 0:
-                API_SM_SUM_used = state[sm_id]["SUM_berechnet"] + (API_SM_MEAN / 6.0)
+                API_SM_SUM_used = state[sm_id]["SUM_berechnet"] + (API_SM_MEAN // 6)
 
-        # Summenwert nur übernehmen, wenn er größer als der alte ist
-        if API_SM_SUM > state[sm_id]["SUM_alt2"]:
+        # Neue Logik: nur übernehmen, wenn größer
+        if API_SM_SUM <= state[sm_id]["SUM_alt2"]:
+            API_SM_SUM_used = state[sm_id]["SUM_berechnet"]
+        else:
             state[sm_id]["SUM_alt2"] = API_SM_SUM
 
-        # Zustand aktualisieren (aber stale_count bleibt bestehen bis Mitternacht!)
+        # Zustand aktualisieren (stale_count bleibt bestehen bis Reset)
         state[sm_id]["MEAN_alt"] = API_SM_MEAN
         state[sm_id]["SUM_berechnet"] = API_SM_SUM_used
 
