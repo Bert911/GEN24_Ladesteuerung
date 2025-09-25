@@ -82,10 +82,14 @@ def get_API(data):
             sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
         except KeyError:
             print(f"SM {sm_id}: KeyError → 'SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64' fehlt")
-            continue
+            # Fallback: nutze den höheren der alten Werte
+            sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
+            sm_mean = 0
         except (TypeError, ValueError) as e:
             print(f"SM {sm_id}: Fehler bei sm_sum-Wert → {e}")
-            continue
+            sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
+            sm_mean = 0
+
 """
         try:
             channels = data['Body']['Data'][sm_id]['channels']
