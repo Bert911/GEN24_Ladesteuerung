@@ -74,10 +74,12 @@ def get_API(data):
             sm_mean = int(channels["SMARTMETER_POWERACTIVE_MEAN_SUM_F64"])
         except KeyError:
             print(f"SM {sm_id}: KeyError → 'SMARTMETER_POWERACTIVE_MEAN_SUM_F64' fehlt")
-            continue
+            sm_mean = 0  # Fallback: kein aktueller Momentanwert
+            sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
         except (TypeError, ValueError) as e:
             print(f"SM {sm_id}: Fehler bei sm_mean-Wert → {e}")
-            continue
+            sm_mean = 0
+            sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
         try:
             sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
         except KeyError:
