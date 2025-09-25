@@ -2,88 +2,88 @@ import json
 import os
 from datetime import datetime
 
+SMARTMETER_IDS = ["16252931", "16711682"]  # IDs der Smartmeter
 SAVE_FILE = os.path.join(os.path.dirname(__file__), "FremdAPI_last.json")
 
-SMARTMETER_IDS = ["16252931", "16711682"]  # IDs der Smartmeter
+# ---------- Hilfsfunktionen ----------
 
 def load_state():
+    """Lädt gespeicherten Zustand oder liefert Standardwerte."""
     if os.path.exists(SAVE_FILE):
         try:
             with open(SAVE_FILE, "r") as f:
                 return json.load(f)
         except Exception as e:
             print(f"Laden der alten Werte fehlgeschlagen: {e}")
-    # Standardwerte
+
     return {
-        sm_id: {
-            "MEAN_alt": 0,
-            "SUM_berechnet": 0,
-            "SUM_alt2": 0,
-            "stale_count": 0
-        }
+        sm_id: {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
         for sm_id in SMARTMETER_IDS
     }
 
 def save_state(state):
+    """Speichert aktuellen Zustand."""
     try:
         with open(SAVE_FILE, "w") as f:
             json.dump(state, f)
     except Exception as e:
         print(f"Speichern der Werte fehlgeschlagen: {e}")
 
-def get_API(data):
-    state = load_state()
+def reset_counters(state):
+    """Setzt Zähler zwischen 00:05 und 00:25 zurück."""
     now = datetime.now()
-
-    # Zähler zwischen 00:05 und 00:25 zurücksetzen
     if now.hour == 0 and 5 <= now.minute <= 25:
-        for sm_id in SMARTMETER_IDS:
-            state[sm_id]["stale_count"] = 0
+        for sm in state.values():
+            sm["stale_count"] = 0
         print("Tagesreset: Stale-Counter auf 0 gesetzt")
 
-    total_mean = 0
-    total_sum = 0
+
+# ---------- Hauptfunktion ----------
+
+def get_API(data):
+    state = load_state()
+    reset_counters(state)
+    now = datetime.now()
+
+    total_mean, total_sum = 0, 0
 
     for sm_id in SMARTMETER_IDS:
-        if sm_id not in state:
-            state[sm_id] = {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
+        sm_state = state.setdefault(sm_id, {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0})
 
         try:
             channels = data['Body']['Data'][sm_id]['channels']
-            API_SM_MEAN = int(channels['SMARTMETER_POWERACTIVE_MEAN_SUM_F64'])
-            API_SM_SUM = int(channels['SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64'])
+            sm_mean = int(channels['SMARTMETER_POWERACTIVE_MEAN_SUM_F64'])
+            sm_sum = int(channels['SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64'])
         except KeyError:
-            # Smartmeter nicht erreichbar → letzten gespeicherten Wert nehmen
-            API_SM_MEAN = state[sm_id]["MEAN_alt"]
-            API_SM_SUM = max(state[sm_id]["SUM_berechnet"], state[sm_id]["SUM_alt2"])
-            print(f"SM {sm_id}: nicht erreichbar, benutze gespeicherte Werte")
-        
-        API_SM_SUM_used = API_SM_SUM
+            print(f"SM {sm_id}: nicht erreichbar")
+            # Fallback: den höheren Wert der alten Summen nutzen
+            sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
+            sm_mean = 0
 
-        # Wenn Summenwert unverändert ist → hochzählen (nur tagsüber)
-        if API_SM_SUM == state[sm_id]["SUM_alt2"]:
-            if 8 <= now.hour < 18:
-                state[sm_id]["stale_count"] += 1
-                print(f"SM {sm_id}: unverändert, Zähler = {state[sm_id]['stale_count']}")
-            if state[sm_id]["SUM_berechnet"] != 0:
-                API_SM_SUM_used = state[sm_id]["SUM_berechnet"] + (API_SM_MEAN // 6)
+        sm_sum_used = sm_sum
 
-        # Summenwert nur übernehmen, wenn er größer ist
-        if API_SM_SUM > state[sm_id]["SUM_alt2"]:
-            state[sm_id]["SUM_alt2"] = API_SM_SUM
+        # Keine neuen Daten → stale_count hochzählen (tagsüber)
+        if sm_sum == sm_state["SUM_alt2"] and 8 <= now.hour < 18:
+            sm_state["stale_count"] += 1
+            print(f"SM {sm_id}: unverändert, Zähler = {sm_state['stale_count']}")
+            sm_sum_used = sm_state["SUM_berechnet"] + sm_mean // 6
+
+        # Summenwert nur übernehmen, wenn er wächst
+        if sm_sum > sm_state["SUM_alt2"]:
+            sm_state["SUM_alt2"] = sm_sum
 
         # Zustand aktualisieren
-        state[sm_id]["MEAN_alt"] = API_SM_MEAN
-        state[sm_id]["SUM_berechnet"] = API_SM_SUM_used
+        sm_state["MEAN_alt"] = sm_mean
+        sm_state["SUM_berechnet"] = sm_sum_used
 
-        total_mean += API_SM_MEAN
-        total_sum += API_SM_SUM_used
+        total_mean += sm_mean
+        total_sum += sm_sum_used
 
     save_state(state)
 
     Fremd_API = {
-        'aktuellePVProduktion': int(total_mean),
-        'AC_Produktion': int(total_sum),
+        'aktuellePVProduktion': total_mean,
+        'AC_Produktion': total_sum,
         'DC_Produktion': int(total_sum * 1.05)
     }
 
