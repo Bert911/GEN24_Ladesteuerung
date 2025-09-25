@@ -50,49 +50,42 @@ def get_API(data):
     for sm_id in SMARTMETER_IDS:
         sm_state = state.setdefault(sm_id, {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0})
 
-
-try:
-    body = data["Body"]
-except KeyError:
-    print(f"SM {sm_id}: KeyError → 'Body' fehlt")
-    continue
-
-try:
-    body_data = body["Data"]
-except KeyError:
-    print(f"SM {sm_id}: KeyError → 'Data' fehlt")
-    continue
-
-try:
-    sm_data = body_data[sm_id]
-except KeyError:
-    print(f"SM {sm_id}: KeyError → Smartmeter-ID {sm_id} fehlt")
-    continue
-
-try:
-    channels = sm_data["channels"]
-except KeyError:
-    print(f"SM {sm_id}: KeyError → 'channels' fehlt")
-    continue
-
-try:
-    sm_mean = int(channels["SMARTMETER_POWERACTIVE_MEAN_SUM_F64"])
-except KeyError:
-    print(f"SM {sm_id}: KeyError → 'SMARTMETER_POWERACTIVE_MEAN_SUM_F64' fehlt")
-    continue
-except (TypeError, ValueError) as e:
-    print(f"SM {sm_id}: Fehler bei sm_mean-Wert → {e}")
-    continue
-
-try:
-    sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
-except KeyError:
-    print(f"SM {sm_id}: KeyError → 'SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64' fehlt")
-    continue
-except (TypeError, ValueError) as e:
-    print(f"SM {sm_id}: Fehler bei sm_sum-Wert → {e}")
-    continue
-
+        try:
+            body = data["Body"]
+        except KeyError:
+            print(f"SM {sm_id}: KeyError → 'Body' fehlt")
+            continue
+        try:
+            body_data = body["Data"]
+        except KeyError:
+            print(f"SM {sm_id}: KeyError → 'Data' fehlt")
+            continue
+        try:
+            sm_data = body_data[sm_id]
+        except KeyError:
+            print(f"SM {sm_id}: KeyError → Smartmeter-ID {sm_id} fehlt")
+            continue
+        try:
+            channels = sm_data["channels"]
+        except KeyError:
+            print(f"SM {sm_id}: KeyError → 'channels' fehlt")
+            continue
+        try:
+            sm_mean = int(channels["SMARTMETER_POWERACTIVE_MEAN_SUM_F64"])
+        except KeyError:
+            print(f"SM {sm_id}: KeyError → 'SMARTMETER_POWERACTIVE_MEAN_SUM_F64' fehlt")
+            continue
+        except (TypeError, ValueError) as e:
+            print(f"SM {sm_id}: Fehler bei sm_mean-Wert → {e}")
+            continue
+        try:
+            sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
+        except KeyError:
+            print(f"SM {sm_id}: KeyError → 'SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64' fehlt")
+            continue
+        except (TypeError, ValueError) as e:
+            print(f"SM {sm_id}: Fehler bei sm_sum-Wert → {e}")
+            continue
 """
         try:
             channels = data['Body']['Data'][sm_id]['channels']
@@ -104,6 +97,7 @@ except (TypeError, ValueError) as e:
             sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
             sm_mean = 0
 """
+
         sm_sum_used = sm_sum
 
         # Keine neuen Daten → stale_count hochzählen (tagsüber)
