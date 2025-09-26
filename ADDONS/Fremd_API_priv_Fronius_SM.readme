@@ -1,6 +1,9 @@
 import json
 import os
+import pprint
 from datetime import datetime
+
+DEBUG = True  # für schnelle Aktivierung/Deaktivierung
 
 SMARTMETER_IDS = ["16252931", "16711682"]  # IDs der Smartmeter
 SAVE_FILE = os.path.join(os.path.dirname(__file__), "FremdAPI_last.json")
@@ -30,12 +33,14 @@ def save_state(state):
         print(f"Speichern der Werte fehlgeschlagen: {e}")
 
 def reset_counters(state):
-    """Setzt Zähler zwischen 00:05 und 00:25 zurück."""
+    """Setzt nur den Stale-Counter zwischen 00:05 und 00:25 zurück."""
     now = datetime.now()
     if now.hour == 0 and 5 <= now.minute <= 25:
         for sm in state.values():
             sm["stale_count"] = 0
         print("Tagesreset: Stale-Counter auf 0 gesetzt")
+        return True
+    return False
 
 
 # ---------- Hauptfunktion ----------
@@ -78,10 +83,18 @@ def get_API(data):
             sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
         except KeyError:
             print(f"SM {sm_id}: KeyError → 'SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64' fehlt")
+            if DEBUG:
+                print(">>> Vollständige Daten für Debugging (KeyError bei sm_sum):")
+                pprint.pprint(data, indent=2, width=120, depth=5)
             sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
+            sm_mean = 0
         except (TypeError, ValueError) as e:
             print(f"SM {sm_id}: Fehler bei sm_sum-Wert → {e}")
+            if DEBUG:
+                print(">>> Vollständige Daten für Debugging (TypeError/ValueError bei sm_sum):")
+                pprint.pprint(data, indent=2, width=120, depth=5)
             sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
+            sm_mean = 0
 
         # --- Verarbeitete Summenwerte ---
         sm_sum_used = sm_sum
@@ -103,15 +116,21 @@ def get_API(data):
         total_mean += sm_mean
         total_sum += sm_sum_used
 
+    # --- Schutz gegen Rückschritte ---
+    last_total = sum(s.get("SUM_berechnet", 0) for s in state.values())
+    if total_sum < last_total:
+        print(f"Warnung: total_sum ({total_sum}) kleiner als letzter gespeicherter Wert ({last_total}), verwende alten Wert")
+        total_sum = last_total
+
     save_state(state)
 
     Fremd_API = {
-        'aktuellePVProduktion': total_mean,
-        'AC_Produktion': total_sum,
-        'DC_Produktion': int(total_sum * 1.05)
+        "aktuellePVProduktion": total_mean,
+        "AC_Produktion": total_sum,
+        "DC_Produktion": int(total_sum * 1.05)
     }
 
-    print("\nGesamtProduktionSM:", Fremd_API['aktuellePVProduktion'])
-    print("GesamtEnergieSM:", Fremd_API['AC_Produktion'], "\n")
+    print("\nGesamtProduktionSM:", Fremd_API["aktuellePVProduktion"])
+    print("GesamtEnergieSM:", Fremd_API["AC_Produktion"], "\n")
 
     return Fremd_API
