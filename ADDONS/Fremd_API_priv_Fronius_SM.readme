@@ -1,17 +1,31 @@
 import json
 import os
+import requests
 import pprint
 from datetime import datetime
 
-DEBUG = True  # für schnelle Aktivierung/Deaktivierung
-
 SMARTMETER_IDS = ["16252931", "16711682"]  # IDs der Smartmeter
 SAVE_FILE = os.path.join(os.path.dirname(__file__), "FremdAPI_last.json")
+GEN24_IP = "192.168.178.42"
+GEN24_URL = f"http://{GEN24_IP}/components/readable"
+
+DEBUG = True  # Debug-Ausgaben aktivieren/deaktivieren
+
 
 # ---------- Hilfsfunktionen ----------
 
+def fetch_gen24_data():
+    """Lädt die Rohdaten direkt vom GEN24."""
+    try:
+        response = requests.get(GEN24_URL, timeout=5)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"Fehler beim Abrufen der Daten von GEN24: {e}")
+        return {}
+
+
 def load_state():
-    """Lädt gespeicherten Zustand oder liefert Standardwerte."""
     if os.path.exists(SAVE_FILE):
         try:
             with open(SAVE_FILE, "r") as f:
@@ -24,23 +38,21 @@ def load_state():
         for sm_id in SMARTMETER_IDS
     }
 
+
 def save_state(state):
-    """Speichert aktuellen Zustand."""
     try:
         with open(SAVE_FILE, "w") as f:
             json.dump(state, f)
     except Exception as e:
         print(f"Speichern der Werte fehlgeschlagen: {e}")
 
+
 def reset_counters(state):
-    """Setzt nur den Stale-Counter zwischen 00:05 und 00:25 zurück."""
     now = datetime.now()
     if now.hour == 0 and 5 <= now.minute <= 25:
         for sm in state.values():
             sm["stale_count"] = 0
         print("Tagesreset: Stale-Counter auf 0 gesetzt")
-        return True
-    return False
 
 
 # ---------- Hauptfunktion ----------
@@ -58,76 +70,66 @@ def get_API(data):
             {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
         )
 
-        # --- Datenzugriff mit Fehleraufschlüsselung ---
+        # Erste Prüfung auf erwartete Struktur
         try:
             body = data["Body"]
             body_data = body["Data"]
             sm_data = body_data[sm_id]
             channels = sm_data["channels"]
         except KeyError as e:
-            print(f"SM {sm_id}: KeyError → {e} fehlt")
-            continue
+            print(f"SM {sm_id}: KeyError → {e} fehlt. Versuche Direktabruf von GEN24...")
+            data = fetch_gen24_data()  # Fallback laden
+            try:
+                body = data["Body"]
+                body_data = body["Data"]
+                sm_data = body_data[sm_id]
+                channels = sm_data["channels"]
+            except Exception as e2:
+                print(f"SM {sm_id}: auch nach Direktabruf fehlend ({e2}). Überspringe.")
+                continue
 
-        # --- Momentanleistung (sm_mean) ---
+        # sm_mean lesen
         try:
             sm_mean = int(channels["SMARTMETER_POWERACTIVE_MEAN_SUM_F64"])
-        except KeyError:
-            print(f"SM {sm_id}: KeyError → 'SMARTMETER_POWERACTIVE_MEAN_SUM_F64' fehlt")
-            sm_mean = 0
-        except (TypeError, ValueError) as e:
-            print(f"SM {sm_id}: Fehler bei sm_mean-Wert → {e}")
+        except Exception as e:
+            print(f"SM {sm_id}: Fehler bei sm_mean → {e}")
+            if DEBUG:
+                pprint.pprint(data, indent=2, width=120, depth=5)
             sm_mean = 0
 
-        # --- Summenwert (sm_sum) ---
+        # sm_sum lesen
         try:
             sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
-        except KeyError:
-            print(f"SM {sm_id}: KeyError → 'SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64' fehlt")
+        except Exception as e:
+            print(f"SM {sm_id}: Fehler bei sm_sum → {e}")
             if DEBUG:
-                print(">>> Vollständige Daten für Debugging (KeyError bei sm_sum):")
-                pprint.pprint(data, indent=2, width=120, depth=5)
-            sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
-            sm_mean = 0
-        except (TypeError, ValueError) as e:
-            print(f"SM {sm_id}: Fehler bei sm_sum-Wert → {e}")
-            if DEBUG:
-                print(">>> Vollständige Daten für Debugging (TypeError/ValueError bei sm_sum):")
                 pprint.pprint(data, indent=2, width=120, depth=5)
             sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
             sm_mean = 0
 
-        # --- Verarbeitete Summenwerte ---
+        # Berechnete Summenwerte
         sm_sum_used = sm_sum
 
-        # Keine neuen Daten → stale_count hochzählen (tagsüber)
         if sm_sum == sm_state["SUM_alt2"] and 8 <= now.hour < 18:
             sm_state["stale_count"] += 1
             print(f"SM {sm_id}: unverändert, Zähler = {sm_state['stale_count']}")
             sm_sum_used = sm_state["SUM_berechnet"] + sm_mean // 6
 
-        # Summenwert nur übernehmen, wenn er wächst
         if sm_sum > sm_state["SUM_alt2"]:
             sm_state["SUM_alt2"] = sm_sum
 
-        # Zustand aktualisieren
         sm_state["MEAN_alt"] = sm_mean
         sm_state["SUM_berechnet"] = sm_sum_used
 
         total_mean += sm_mean
         total_sum += sm_sum_used
 
-    # --- Schutz gegen Rückschritte ---
-    last_total = sum(s.get("SUM_berechnet", 0) for s in state.values())
-    if total_sum < last_total:
-        print(f"Warnung: total_sum ({total_sum}) kleiner als letzter gespeicherter Wert ({last_total}), verwende alten Wert")
-        total_sum = last_total
-
     save_state(state)
 
     Fremd_API = {
         "aktuellePVProduktion": total_mean,
         "AC_Produktion": total_sum,
-        "DC_Produktion": int(total_sum * 1.05)
+        "DC_Produktion": int(total_sum * 1.05),
     }
 
     print("\nGesamtProduktionSM:", Fremd_API["aktuellePVProduktion"])
