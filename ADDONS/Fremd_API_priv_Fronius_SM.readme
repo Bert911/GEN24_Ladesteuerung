@@ -9,9 +9,6 @@ SAVE_FILE = os.path.join(os.path.dirname(__file__), "FremdAPI_last.json")
 GEN24_IP = "192.168.178.42"
 GEN24_URL = f"http://{GEN24_IP}/components/readable"
 
-DEBUG = True  # Debug-Ausgaben aktivieren/deaktivieren
-
-
 # ---------- Hilfsfunktionen ----------
 
 def fetch_gen24_data():
@@ -70,44 +67,45 @@ def get_API(data):
             {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
         )
 
-        # Erste Prüfung auf erwartete Struktur
+        # --- channels aus übergebener data lesen ---
         try:
             body = data["Body"]
             body_data = body["Data"]
             sm_data = body_data[sm_id]
             channels = sm_data["channels"]
-        except KeyError as e:
-            print(f"SM {sm_id}: KeyError → {e} fehlt. Versuche Direktabruf von GEN24...")
-            data = fetch_gen24_data()  # Fallback laden
-            try:
-                body = data["Body"]
-                body_data = body["Data"]
-                sm_data = body_data[sm_id]
-                channels = sm_data["channels"]
-            except Exception as e2:
-                print(f"SM {sm_id}: auch nach Direktabruf fehlend ({e2}). Überspringe.")
-                continue
+        except Exception as e:
+            print(f"SM {sm_id}: Fehler beim Zugriff auf channels → {e}")
+            continue
 
-        # sm_mean lesen
+        # --- sm_mean ---
         try:
             sm_mean = int(channels["SMARTMETER_POWERACTIVE_MEAN_SUM_F64"])
         except Exception as e:
             print(f"SM {sm_id}: Fehler bei sm_mean → {e}")
-            if DEBUG:
-                pprint.pprint(data, indent=2, width=120, depth=5)
             sm_mean = 0
 
-        # sm_sum lesen
+        # --- sm_sum ---
         try:
             sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
         except Exception as e:
-            print(f"SM {sm_id}: Fehler bei sm_sum → {e}")
-            if DEBUG:
-                pprint.pprint(data, indent=2, width=120, depth=5)
-            sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
-            sm_mean = 0
+            print(f"SM {sm_id}: Fehler bei sm_sum → {e}. Versuche Direktabruf von GEN24...")
+            fresh_data = fetch_gen24_data()
+            try:
+                body = fresh_data["Body"]
+                body_data = body["Data"]
+                sm_data = body_data[sm_id]
+                channels = sm_data["channels"]
+                sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
+                sm_mean = int(channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0))
+                print(f"SM {sm_id}: Direktabruf erfolgreich.")
+            except Exception as e2:
+                print(f"SM {sm_id}: auch nach Direktabruf nicht lesbar ({e2}). Nutze Fallback.")
+                print(">>> Debug-Daten (falls vorhanden):")
+                pprint.pprint(fresh_data, indent=2, width=120, depth=5)
+                sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
+                sm_mean = 0
 
-        # Berechnete Summenwerte
+        # --- Summenwert-Logik ---
         sm_sum_used = sm_sum
 
         if sm_sum == sm_state["SUM_alt2"] and 8 <= now.hour < 18:
