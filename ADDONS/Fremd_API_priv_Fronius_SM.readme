@@ -120,11 +120,18 @@ def get_API(data):
             if sm_sum is None:
                 print(f"SM {sm_id}: auch nach 2 Direktabrufen nicht lesbar. Nutze Fallback.")
                 sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
-                sm_mean = sm_state[""MEAN_alt""]
+                sm_mean = sm_state["MEAN_alt"]
 
         # --- Berechnete Summenwerte ---
         sm_sum_used = sm_sum
 
+        # Wertebereich für sm_mean prüfen
+        if 0 <= sm_mean < 8000:
+            sm_state["MEAN_alt"] = sm_mean
+        else:
+            sm_mean = sm_state["MEAN_alt"]
+
+        # Stale-Check tagsüber
         if sm_sum == sm_state["SUM_alt2"] and 8 <= now.hour < 18:
             sm_state["stale_count"] += 1
             print(f"SM {sm_id}: unverändert, Zähler = {sm_state['stale_count']}")
@@ -133,7 +140,6 @@ def get_API(data):
         if sm_sum > sm_state["SUM_alt2"]:
             sm_state["SUM_alt2"] = sm_sum
 
-        sm_state["MEAN_alt"] = sm_mean
         sm_state["SUM_berechnet"] = sm_sum_used
 
         total_mean += sm_mean
