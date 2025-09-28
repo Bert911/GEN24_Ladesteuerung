@@ -138,11 +138,12 @@ def get_API(data):
             print(f"SM {sm_id}: unverändert, Zähler = {sm_state['stale_count']}")
             sm_sum_used = sm_state["SUM_berechnet"] + sm_mean // 6
 
-        if sm_sum > sm_state["SUM_alt2"]:
+        if (sm_sum > sm_state["SUM_alt2"])&&(sm_sum < (sm_state["SUM_alt2"] + 1500)):
             sm_state["SUM_alt2"] = sm_sum
-
-        sm_state["MEAN_alt"] = sm_mean
-        sm_state["SUM_berechnet"] = sm_sum_used
+        if (sm_state["MEAN_alt"] > 0 )&&(sm_state["MEAN_alt"] <8000):
+            sm_state["MEAN_alt"] = sm_mean
+        if (sm_sum > sm_state["SUM_alt2"])&&(sm_sum < (sm_state["SUM_alt2"] + 1500)):
+            sm_state["SUM_berechnet"] = sm_sum_used
 
         total_mean += sm_mean
         total_sum += sm_sum_used
