@@ -120,7 +120,7 @@ def get_API(data):
             if sm_sum is None:
                 print(f"SM {sm_id}: auch nach 2 Direktabrufen nicht lesbar. Nutze Fallback.")
                 sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
-                sm_mean = 0
+                sm_mean = sm_state[""MEAN_alt""]
 
         # --- Berechnete Summenwerte ---
         sm_sum_used = sm_sum
