@@ -24,7 +24,7 @@ def fetch_gen24_data():
 
 
 def load_state():
-    """Lädt gespeicherten Zustand oder legt Defaults an."""
+    """Lädt den letzten Zustand oder setzt Defaults."""
     if os.path.exists(SAVE_FILE):
         try:
             with open(SAVE_FILE, "r") as f:
@@ -54,7 +54,7 @@ def reset_counters(state):
     now = datetime.now()
     if now.hour == 0 and 5 <= now.minute <= 25:
         for sm in state.values():
-            if isinstance(sm, dict):  # nur Smartmeter-Objekte
+            if isinstance(sm, dict):  # nur echte Smartmeter, nicht TOTAL_SUM_ALT
                 sm["stale_count"] = 0
         print("Tagesreset: Stale-Counter auf 0 gesetzt")
 
@@ -159,7 +159,11 @@ def get_API(data):
 
     # ---- 2. Sicherheit: total_sum Plausibilitätsprüfung ----
     last_total = state.get("TOTAL_SUM_ALT", 0)
-    if total_sum < last_total:
+
+    if last_total == 0:
+        # Erster Start: aktuellen Wert übernehmen
+        print(f"Erster Start erkannt → setze TOTAL_SUM_ALT = {total_sum}")
+    elif total_sum < last_total:
         print(f"⚠️ Gesamtenergie rückläufig ({total_sum} < {last_total}), nutze alten Wert.")
         total_sum = last_total
     elif total_sum > last_total + 16000:
