@@ -162,4 +162,6 @@ def get_API(data):
     }
 
     print("\nGesamtProduktionSM:", Fremd_API["aktuellePVProduktion"])
-    print("GesamtEner
+    print("GesamtEnergieSM:", Fremd_API["AC_Produktion"], "\n")
+
+    return Fremd_API
