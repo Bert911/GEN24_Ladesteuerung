@@ -9,6 +9,7 @@ SAVE_FILE = os.path.join(os.path.dirname(__file__), "FremdAPI_last.json")
 GEN24_IP = "192.168.178.42"
 GEN24_URL = f"http://{GEN24_IP}/components/readable"
 
+
 # ---------- Hilfsfunktionen ----------
 
 def fetch_gen24_data():
@@ -54,10 +55,7 @@ def reset_counters(state):
 
 
 def try_direct_read(sm_id, wait_seconds=15, attempt=1):
-    """
-    Versucht einen Direktabruf vom GEN24 für ein Smartmeter.
-    Wartezeit wird optional berücksichtigt.
-    """
+    """Versucht einen Direktabruf vom GEN24 für ein Smartmeter."""
     if wait_seconds > 0:
         print(f"SM {sm_id}: Warte {wait_seconds} Sekunden vor Direktabruf (Versuch {attempt})...")
         time.sleep(wait_seconds)
@@ -92,7 +90,7 @@ def get_API(data):
             {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
         )
 
-        # --- Struktur prüfen ---
+        # Datenstruktur prüfen
         try:
             body = data["Body"]
             body_data = body["Data"]
@@ -102,33 +100,27 @@ def get_API(data):
             print(f"SM {sm_id}: Strukturfehler in den übergebenen Daten → {e}")
             continue
 
-        # --- sm_mean lesen ---
+        # sm_mean lesen
         try:
             sm_mean = int(channels["SMARTMETER_POWERACTIVE_MEAN_SUM_F64"])
         except Exception as e:
             print(f"SM {sm_id}: Fehler bei sm_mean → {e}")
             sm_mean = 0
 
-        # --- sm_sum lesen ---
+        # sm_sum lesen
         try:
             sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
         except Exception as e:
             print(f"SM {sm_id}: Fehler bei sm_sum → {e}. Starte Direktabruf...")
+            sm_sum, sm_mean = try_direct_read(sm_id, wait_seconds=15, attempt=1)
 
-            # Erster Direktabruf
-            sm_sum, sm_mean_direct = try_direct_read(sm_id, wait_seconds=15, attempt=1)
-
-            # Zweiter Versuch, falls nötig
             if sm_sum is None:
-                sm_sum, sm_mean_direct = try_direct_read(sm_id, wait_seconds=15, attempt=2)
+                sm_sum, sm_mean = try_direct_read(sm_id, wait_seconds=15, attempt=2)
 
-            # Wenn auch nach 2 Versuchen nichts da ist → Fallback
             if sm_sum is None:
                 print(f"SM {sm_id}: auch nach 2 Direktabrufen nicht lesbar. Nutze Fallback.")
                 sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
                 sm_mean = 0
-            else:
-                sm_mean = sm_mean_direct
 
         # --- Berechnete Summenwerte ---
         sm_sum_used = sm_sum
