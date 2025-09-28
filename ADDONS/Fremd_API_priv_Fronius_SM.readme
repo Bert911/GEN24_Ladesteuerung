@@ -127,6 +127,12 @@ def get_API(data):
                 sm_sum = sm_state["SUM_alt2"]
                 sm_mean = sm_state["MEAN_alt"]
 
+        # --- Erste Initialisierung ---
+        if sm_state["SUM_berechnet"] == 0 and sm_state["SUM_alt2"] == 0:
+            print(f"SM {sm_id}: Erste Initialisierung → übernehme aktuellen Wert {sm_sum}")
+            sm_state["SUM_berechnet"] = sm_sum
+            sm_state["SUM_alt2"] = sm_sum
+
         # Wertebereich für sm_sum prüfen
         if (min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
             <= sm_sum
