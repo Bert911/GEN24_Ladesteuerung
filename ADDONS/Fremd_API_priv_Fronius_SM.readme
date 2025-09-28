@@ -24,6 +24,7 @@ def fetch_gen24_data():
 
 
 def load_state():
+    """Lädt gespeicherten Zustand oder legt Defaults an."""
     if os.path.exists(SAVE_FILE):
         try:
             with open(SAVE_FILE, "r") as f:
@@ -32,10 +33,12 @@ def load_state():
             print(f"Laden der alten Werte fehlgeschlagen: {e}")
 
     # Defaults falls Datei fehlt oder defekt
-    return {
+    state = {
         sm_id: {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
         for sm_id in SMARTMETER_IDS
     }
+    state["TOTAL_SUM_ALT"] = 0
+    return state
 
 
 def save_state(state):
@@ -51,7 +54,8 @@ def reset_counters(state):
     now = datetime.now()
     if now.hour == 0 and 5 <= now.minute <= 25:
         for sm in state.values():
-            sm["stale_count"] = 0
+            if isinstance(sm, dict):  # nur Smartmeter-Objekte
+                sm["stale_count"] = 0
         print("Tagesreset: Stale-Counter auf 0 gesetzt")
 
 
@@ -126,7 +130,7 @@ def get_API(data):
         # Wertebereich für sm_sum prüfen
         if (min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
             <= sm_sum
-            <= (max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + 1000)):
+            <= (max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + 8000)):
             sm_state["SUM_alt2"] = sm_sum
         else:
             print(f"SM {sm_id}: Fehler Summenwert ({sm_sum}), nutze Fallback.")
@@ -153,6 +157,16 @@ def get_API(data):
         total_mean += sm_mean
         total_sum += sm_sum
 
+    # ---- 2. Sicherheit: total_sum Plausibilitätsprüfung ----
+    last_total = state.get("TOTAL_SUM_ALT", 0)
+    if total_sum < last_total:
+        print(f"⚠️ Gesamtenergie rückläufig ({total_sum} < {last_total}), nutze alten Wert.")
+        total_sum = last_total
+    elif total_sum > last_total + 16000:
+        print(f"⚠️ Gesamtenergie-Sprung zu groß (+{total_sum - last_total}), nutze alten Wert.")
+        total_sum = last_total
+
+    state["TOTAL_SUM_ALT"] = total_sum
     save_state(state)
 
     Fremd_API = {
