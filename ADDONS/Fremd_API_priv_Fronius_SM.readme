@@ -59,7 +59,7 @@ def reset_counters(state):
         print("Tagesreset: Stale-Counter auf 0 gesetzt")
 
 
-def try_direct_read(sm_id, wait_seconds=15, attempt=1):
+def try_direct_read(sm_id, wait_seconds=60, attempt=1):
     """Versucht einen Direktabruf vom GEN24 für ein Smartmeter."""
     if wait_seconds > 0:
         print(f"SM {sm_id}: Warte {wait_seconds} Sekunden vor Direktabruf (Versuch {attempt})...")
@@ -117,10 +117,10 @@ def get_API(data):
             sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
         except Exception as e:
             print(f"SM {sm_id}: Fehler bei sm_sum → {e}. Starte Direktabruf...")
-            sm_sum, sm_mean = try_direct_read(sm_id, wait_seconds=15, attempt=1)
+            sm_sum, sm_mean = try_direct_read(sm_id, wait_seconds=60, attempt=1)
 
             if sm_sum is None:
-                sm_sum, sm_mean = try_direct_read(sm_id, wait_seconds=15, attempt=2)
+                sm_sum, sm_mean = try_direct_read(sm_id, wait_seconds=60, attempt=2)
 
             if sm_sum is None:
                 print(f"SM {sm_id}: auch nach 2 Direktabrufen nicht lesbar. Nutze Fallback.")
