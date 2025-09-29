@@ -133,6 +133,13 @@ def get_API(data):
             sm_state["SUM_berechnet"] = sm_sum
             sm_state["SUM_alt2"] = sm_sum
 
+        # Stale-Check tagsüber
+        if sm_sum == sm_state["SUM_alt2"] and 8 <= now.hour < 18:
+            sm_state["stale_count"] += 1
+            print(f"SM {sm_id}: unverändert, Zähler = {sm_state['stale_count']}")
+            sm_sum = sm_state["SUM_berechnet"] + sm_mean // 6
+            sm_state["SUM_berechnet"] = sm_sum
+
         # Wertebereich für sm_sum prüfen
         if (min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
             <= sm_sum
@@ -151,13 +158,6 @@ def get_API(data):
 
         # SUM_berechnet nur erhöhen, wenn neuer Wert plausibel größer ist
         if sm_sum > sm_state["SUM_berechnet"]:
-            sm_state["SUM_berechnet"] = sm_sum
-
-        # Stale-Check tagsüber
-        if sm_sum == sm_state["SUM_alt2"] and 8 <= now.hour < 18:
-            sm_state["stale_count"] += 1
-            print(f"SM {sm_id}: unverändert, Zähler = {sm_state['stale_count']}")
-            sm_sum = sm_state["SUM_berechnet"] + sm_mean // 6
             sm_state["SUM_berechnet"] = sm_sum
 
         total_mean += sm_mean
