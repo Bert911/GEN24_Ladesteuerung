@@ -173,8 +173,11 @@ def get_API(data):
         print(f"⚠️ Gesamtenergie rückläufig ({total_sum} < {last_total}), nutze alten Wert.")
         total_sum = last_total
     elif total_sum > last_total + 16000:
-        print(f"⚠️ Gesamtenergie-Sprung zu groß (+{total_sum - last_total}), nutze alten Wert.")
+        print(f"⚠️ Gesamtenergie-Sprung zu deutlich groß (+{total_sum - last_total}), nutze alten Wert.")
         total_sum = last_total
+    elif total_sum > last_total + 1600:
+        print(f"⚠️ Gesamtenergie-Sprung zu groß (+{total_sum - last_total}), nutze reduzierten Wert.")
+        total_sum = last_total + 1600
 
     state["TOTAL_SUM_ALT"] = total_sum
     save_state(state)
