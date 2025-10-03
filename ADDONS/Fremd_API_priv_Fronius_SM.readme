@@ -140,6 +140,13 @@ def get_API(data):
             sm_sum = sm_state["SUM_berechnet"] + sm_mean // 6
             sm_state["SUM_berechnet"] = sm_sum
 
+        # Wertebereich für sm_mean prüfen
+        if 0 <= sm_mean < 8000:
+            sm_state["MEAN_alt"] = sm_mean
+        else:
+            print(f"SM {sm_id}: Fehler Produktionswert ({sm_mean}), nutze alten Wert.")
+            sm_mean = sm_state["MEAN_alt"]
+
         # Wertebereich für sm_sum prüfen
         if (min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
             <= sm_sum
@@ -147,14 +154,7 @@ def get_API(data):
             sm_state["SUM_alt2"] = sm_sum
         else:
             print(f"SM {sm_id}: Fehler Summenwert ({sm_sum}), nutze Fallback.")
-            sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
-
-        # Wertebereich für sm_mean prüfen
-        if 0 <= sm_mean < 8000:
-            sm_state["MEAN_alt"] = sm_mean
-        else:
-            print(f"SM {sm_id}: Fehler Produktionswert ({sm_mean}), nutze alten Wert.")
-            sm_mean = sm_state["MEAN_alt"]
+            sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + sm_state["MEAN_alt"] / 6
 
         # SUM_berechnet nur erhöhen, wenn neuer Wert plausibel größer ist
         if sm_sum > sm_state["SUM_berechnet"]:
@@ -172,7 +172,7 @@ def get_API(data):
     elif total_sum < last_total:
         print(f"⚠️ Gesamtenergie rückläufig ({total_sum} < {last_total}), nutze alten Wert.")
         total_sum = last_total
-    elif total_sum > last_total + 16000:
+    elif total_sum > last_total + 32000:
         print(f"⚠️ Gesamtenergie-Sprung zu deutlich groß (+{total_sum - last_total}), nutze alten Wert.")
         total_sum = last_total
     elif total_sum > last_total + 1600:
