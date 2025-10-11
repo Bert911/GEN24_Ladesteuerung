@@ -137,7 +137,7 @@ def get_API(data):
         if sm_sum == sm_state["SUM_alt2"] and 8 <= now.hour < 18:
             sm_state["stale_count"] += 1
             print(f"SM {sm_id}: unverändert, Zähler = {sm_state['stale_count']}")
-            sm_sum = int(sm_state["SUM_berechnet"] + sm_mean / 6)
+            sm_sum = int(sm_state["SUM_berechnet"] + sm_mean / 8)
             sm_state["SUM_berechnet"] = sm_sum
 
         # Wertebereich für sm_mean prüfen
@@ -154,7 +154,7 @@ def get_API(data):
             sm_state["SUM_alt2"] = sm_sum
         else:
             print(f"SM {sm_id}: Fehler Summenwert ({sm_sum}), nutze Fallback.")
-            sm_sum = int(max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + sm_state["MEAN_alt"] / 6)
+            sm_sum = int(max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + sm_state["MEAN_alt"] / 8)
 
         # SUM_berechnet nur erhöhen, wenn neuer Wert plausibel größer ist
         if sm_sum > sm_state["SUM_berechnet"]:
