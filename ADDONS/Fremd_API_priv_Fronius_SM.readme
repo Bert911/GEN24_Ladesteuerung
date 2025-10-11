@@ -153,8 +153,9 @@ def get_API(data):
             <= (max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + 8000)):
             sm_state["SUM_alt2"] = sm_sum
         else:
-            print(f"SM {sm_id}: Fehler Summenwert ({sm_sum}), nutze Fallback.")
+            old_sum = sm_sum
             sm_sum = int(max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + sm_state["MEAN_alt"] / 8)
+            print(f"SM {sm_id}: Fehler Summenwert ({old_sum}), nutze Fallback → neuer Wert = {sm_sum}")
 
         # SUM_berechnet nur erhöhen, wenn neuer Wert plausibel größer ist
         if sm_sum > sm_state["SUM_berechnet"]:
