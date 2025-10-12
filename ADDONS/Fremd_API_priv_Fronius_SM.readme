@@ -150,8 +150,10 @@ def get_API(data):
         # Wertebereich für sm_sum prüfen
         if (min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
             <= sm_sum
-            <= (max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + 8000)):
+            <= (max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + 16000)):
             sm_state["SUM_alt2"] = sm_sum
+        elif ((min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) - 800) <= sm_sum):
+            sm_sum = int(max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]))
         else:
             old_sum = sm_sum
             sm_sum = int(max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + sm_state["MEAN_alt"] / 8)
