@@ -1,1 +1,223 @@
+import json
+import os
+import requests
+import time
+from datetime import datetime
 
+# Mapping alte SM-ID → neue GEN24-Device-ID
+SMARTMETER_MAP = {
+    "16252931": "Fronius_SmartMeter_2223836ab422",
+    "16711682": "Fronius_SmartMeter_4d68ed529a2d"
+}
+
+SMARTMETER_IDS = list(SMARTMETER_MAP.keys())
+
+SAVE_FILE = os.path.join(os.path.dirname(__file__), "FremdAPI_last.json")
+GEN24_IP = "192.168.178.42"
+GEN24_URL = f"http://{GEN24_IP}/components/readable"
+
+
+# ---------- Hilfsfunktionen ----------
+
+def fetch_gen24_data():
+    try:
+        r = requests.get(GEN24_URL, timeout=5)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        print(f"Fehler beim Gen24 Direktabruf: {e}")
+        return {}
+
+
+def extract_devices_struct(data):
+    """
+    Datenstruktur aus externem Script prüfen.
+    Zulässig:
+        data["Body"]["Data"]
+        data["Data"]
+        direkt data (falls schon vorverarbeitet)
+    """
+    if isinstance(data, dict):
+        if "Body" in data and "Data" in data["Body"]:
+            return data["Body"]["Data"]
+        if "Data" in data:
+            return data["Data"]
+        return data
+
+    return {}
+
+
+def load_state():
+    if os.path.exists(SAVE_FILE):
+        try:
+            with open(SAVE_FILE, "r") as f:
+                return json.load(f)
+        except:
+            pass
+
+    state = {
+        sm_id: {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
+        for sm_id in SMARTMETER_IDS
+    }
+    state["TOTAL_SUM_ALT"] = 0
+    return state
+
+
+def save_state(state):
+    try:
+        with open(SAVE_FILE, "w") as f:
+            json.dump(state, f)
+    except Exception as e:
+        print(f"Fehler beim Speichern: {e}")
+
+
+def reset_counters(state):
+    now = datetime.now()
+    if now.hour == 0 and 5 <= now.minute <= 25:
+        for sm in state.values():
+            if isinstance(sm, dict):
+                sm["stale_count"] = 0
+        print("Tagesreset: stale_count zurückgesetzt.")
+
+
+def try_direct_read(sm_id, attempt):
+    """
+    Direktabruf bei GEN24 durchführen.
+    """
+    wait_seconds = 30 if attempt == 1 else 10
+    print(f"SM {sm_id}: Direktabruf – Warte {wait_seconds}s (Versuch {attempt}) …")
+    time.sleep(wait_seconds)
+
+    fresh = fetch_gen24_data()
+    if not fresh:
+        return None, None
+
+    try:
+        device = SMARTMETER_MAP[sm_id]
+        sm_data = fresh[device]
+        ch = sm_data["channels"]
+
+        sum_val = int(ch["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
+        mean_val = int(ch.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0))
+
+        print(f"SM {sm_id}: Direktabruf erfolgreich.")
+        return sum_val, mean_val
+
+    except Exception as e:
+        print(f"SM {sm_id}: Direktabruf Fehler → {e}")
+        return None, None
+
+
+# ---------- Hauptfunktion ----------
+
+def get_API(data):
+    state = load_state()
+    reset_counters(state)
+    now = datetime.now()
+
+    devices = extract_devices_struct(data)
+
+    total_mean = 0
+    total_sum = 0
+
+    for sm_id in SMARTMETER_IDS:
+
+        sm_state = state[sm_id]
+        device_name = SMARTMETER_MAP[sm_id]
+
+        # ----------- Zugriff auf übergebene Data-Struktur -----------
+        try:
+            sm_data = devices[device_name]
+            channels = sm_data["channels"]
+        except Exception as e:
+            print(f"SM {sm_id}: Strukturfehler in externer Data → {e}")
+            channels = {}
+        # -------------------------------------------------------------
+
+        # Werte einlesen
+        sm_mean = None
+        sm_sum = None
+
+        # Versuche zuerst aus übergebenem Data
+        try:
+            sm_mean = int(channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0))
+        except:
+            sm_mean = None
+
+        try:
+            sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
+        except:
+            sm_sum = None
+
+        # Wenn Summe fehlt → Direktabruf GEN24
+        if sm_sum is None:
+            sm_sum, sm_mean = try_direct_read(sm_id, attempt=1)
+        if sm_sum is None:
+            sm_sum, sm_mean = try_direct_read(sm_id, attempt=2)
+
+        # Wenn immer noch kein Wert → Fallback
+        if sm_sum is None:
+            print(f"SM {sm_id}: Fallback → alte Werte genutzt.")
+            sm_sum = sm_state["SUM_alt2"]
+            sm_mean = sm_state["MEAN_alt"]
+
+        # ----------- Initialisierung -----------
+        if sm_state["SUM_berechnet"] == 0 and sm_state["SUM_alt2"] == 0:
+            print(f"SM {sm_id}: Initialisierung → {sm_sum}")
+            sm_state["SUM_berechnet"] = sm_sum
+            sm_state["SUM_alt2"] = sm_sum
+
+        # ----------- Stale Detection -----------
+        if sm_sum == sm_state["SUM_alt2"] and 8 <= now.hour < 18:
+            sm_state["stale_count"] += 1
+            print(f"SM {sm_id}: unverändert (Stale {sm_state['stale_count']})")
+            sm_sum = int(sm_state["SUM_berechnet"] + sm_mean / 8)
+
+        # Mittelwert validieren
+        if 0 <= sm_mean < 8000:
+            sm_state["MEAN_alt"] = sm_mean
+        else:
+            sm_mean = sm_state["MEAN_alt"]
+
+        # Summen-Validierung
+        if min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) <= sm_sum <= (max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + 16000):
+            sm_state["SUM_alt2"] = sm_sum
+        elif (min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) - 800) <= sm_sum:
+            sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
+        else:
+            wrong = sm_sum
+            sm_sum = int(max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + sm_state["MEAN_alt"] / 8)
+            print(f"SM {sm_id}: Fehlerhafte Summe ({wrong}) → korrigiert zu {sm_sum}")
+
+        # Berechnete Summe aktualisieren
+        if sm_sum > sm_state["SUM_berechnet"]:
+            sm_state["SUM_berechnet"] = sm_sum
+
+        total_mean += sm_mean
+        total_sum += sm_sum
+
+    # ------ Gesamt-Schutzlogik ------
+    last = state["TOTAL_SUM_ALT"]
+
+    if last == 0:
+        print(f"Erster Start → total = {total_sum}")
+    elif total_sum < last:
+        total_sum = last
+    elif total_sum > last + 32000:
+        total_sum = last
+    elif total_sum > last + 1600:
+        total_sum = last + 1600
+
+    state["TOTAL_SUM_ALT"] = total_sum
+    save_state(state)
+
+    Fremd_API = {
+        "aktuellePVProduktion": total_mean,
+        "AC_Produktion": total_sum,
+        "DC_Produktion": int(total_sum * 1.05)
+    }
+
+    print("\nGesamtleistung:", Fremd_API["aktuellePVProduktion"])
+    print("Gesamtenergie:", Fremd_API["AC_Produktion"], "\n")
+
+    return Fremd_API
