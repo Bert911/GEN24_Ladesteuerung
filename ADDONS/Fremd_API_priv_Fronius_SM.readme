@@ -26,7 +26,7 @@ Max_Energiesprung = Leistung_WR / 5     # pro Abruf
 Max_Energiesprung_Tag = Leistung_WR * 8 # Tages-Sicherheit (optional)
 
 
-# >>>>>>>>  Unterhalb bitte nichts mehr ändern  >>>>>>>>>>>>>>>>>>>>>
+# >>>>>>>>  Unterhalb nach Bedarf ändern  >>>>>>>>>>>>>>>>>>>>>
 
 
 SAVE_FILE = os.path.join(os.path.dirname(__file__), "FremdAPI_last.json")
