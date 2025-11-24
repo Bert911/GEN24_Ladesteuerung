@@ -10,7 +10,7 @@ from datetime import datetime
 # Wird nur beim allerersten Start genutzt.
 # Hier Gesamtproduktionswert von allen abzurufenden Smartmetern einfügen.
 
-INITIAL_TOTAL_ENERGY = 35000           # Beispielwert in Wh – bitte anpassen!
+INITIAL_TOTAL_ENERGY = 12669083           # Beispielwert in Wh – bitte anpassen!
 
 SMARTMETER_DEVICES = [                 # Smartmeter-Device-Namen (nur neue GEN24 Struktur ab FW 1.39.5-1)
     "Fronius_SmartMeter_2223836ab422",
