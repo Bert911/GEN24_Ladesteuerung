@@ -4,134 +4,61 @@ import requests
 import time
 from datetime import datetime
 
-# -------------------- KONFIGURATION (hier anpassen) --------------------
-# EINMALIGER INITIAL-WERT (muss manuell gesetzt werden)
-# Wird nur beim allerersten Start genutzt (wenn Datei fehlt oder leer).
+
+# >>>>>>>>  Hier Änderungen vornehmen  >>>>>>>>>>>>>>>>>>>>>
+            # EINMALIGER INITIAL-WERT (muss manuell gesetzt werden)
+            # Wird nur beim allerersten Start genutzt.
+            # Hier Gesamtproduktionswert von allen abzurufenden Smartmeter einfügen.
+
 INITIAL_TOTAL_ENERGY = 35000           # Beispielwert in Wh – bitte anpassen!
 
-# Smartmeter-Device-Namen (NUR neue Gen24-Struktur)
-SMARTMETER_DEVICES = [
+SMARTMETER_DEVICES = [                 # Smartmeter-Device-Namen (NUR Neue Gen24 Struktur ab 1.39.5-1)
     "Fronius_SmartMeter_2223836ab422",
     "Fronius_SmartMeter_4d68ed529a2d"
 ]
+GEN24_IP = "192.168.178.42"            #Gen24 IP Adresse
 
-# Gen24 IP-Adresse
-GEN24_IP = "192.168.178.42"
 
-# Aktivierung der Prüfungen: 1 = aktiv, 0 = aus
-Summenpruefung_aktiv = 1
+Summenpruefung_aktiv = 1               #Die Prüfung kontrolliert die empfangenen Werte auf Richtigkeit, 1=an/0=aus
+Leistung_WR = 7500                     # Beispielwert in W – einfach größten Wechselrichter nehmen, wird für die Prüfung verwendet
 
-# Maximale (gerundete) Leistung pro Wechselrichter - dient als Plausibilitätsgrenze für "mean"
-Leistung_WR = 7500
+Max_Energiesprung=Leistung_WR/5        # Maximaler Energiesprung, pro Durchlauf, 6 Durchläufe je Stunde, 5 oder 4 bei vielen Netzwerkfehlern
+Max_Energiesprung_Tag=Leistung_WR*8    # Vielleicht obsolet, Gen24 hat manchmal die Smartmeter vertauscht, hilfreich bei Netzwerkfehlern, 8h Produktion je Tag
 
-# Pfad der Statusdatei
+# >>>>>>>>  Weiter unten muss eigentlich nichts mehrgeändert werden  >>>>>>>>>>>>>>>>>>>>>
+
+
+
 SAVE_FILE = os.path.join(os.path.dirname(__file__), "FremdAPI_last.json")
 GEN24_URL = f"http://{GEN24_IP}/components/readable"
-# ---------------------------------------------------------------------
 
+# ------------------------- Hilfsfunktionen -------------------------
 
-def log(msg):
-    """Einheitliche Log-Ausgabe mit Zeitstempel."""
-    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {msg}")
-
-
-# ---------- Hilfsfunktionen ----------
-
-def fetch_gen24_data(timeout=5):
-    """Lädt die Rohdaten direkt vom GEN24 (components/readable)."""
+def fetch_gen24_data():
     try:
-        url = GEN24_URL
-        log(f"GEN24 Direktabruf: {url}")
-        response = requests.get(url, timeout=timeout)
+        response = requests.get(GEN24_URL, timeout=5)
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        log(f"Fehler beim Abrufen der Daten von GEN24: {e}")
+        print(f"Fehler beim Abrufen der Daten von GEN24: {e}")
         return {}
 
 
 def load_state():
-    """
-    Lädt den letzten Zustand aus SAVE_FILE.
-    Regeln:
-      - Datei fehlt oder ist leer -> Neues State-Objekt, TOTAL_SUM_ALT ggf. = INITIAL_TOTAL_ENERGY (wenn >0)
-      - Datei existiert, aber defekt/alte Struktur -> Wenn TOTAL_SUM_ALT lesbar: TOTAL_SUM_ALT = max(existing, INITIAL_TOTAL_ENERGY)
-        und die Smartmeter-Einträge werden mit Defaults neu angelegt (mit Hinweis).
-    """
-    defaults = {
+    """Zustand laden, falls nicht vorhanden neu anlegen."""
+    if os.path.exists(SAVE_FILE):
+        try:
+            with open(SAVE_FILE, "r") as f:
+                return json.load(f)
+        except:
+            print("WARNUNG: Alte JSON defekt → neue Struktur wird erstellt.")
+
+    # Standardwerte erzeugen
+    state = {
         dev: {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
         for dev in SMARTMETER_DEVICES
     }
-
-    state = defaults.copy()
     state["TOTAL_SUM_ALT"] = 0
-
-    if not os.path.exists(SAVE_FILE):
-        log(f"INFO: {SAVE_FILE} existiert nicht. Erzeuge neuen State.")
-        if INITIAL_TOTAL_ENERGY > 0:
-            state["TOTAL_SUM_ALT"] = int(INITIAL_TOTAL_ENERGY)
-            log(f"INFO: Setze initial TOTAL_SUM_ALT = INITIAL_TOTAL_ENERGY ({state['TOTAL_SUM_ALT']})")
-        return state
-
-    try:
-        with open(SAVE_FILE, "r") as f:
-            raw = f.read()
-            if not raw.strip():
-                log(f"INFO: {SAVE_FILE} ist leer. Erzeuge neuen State.")
-                if INITIAL_TOTAL_ENERGY > 0:
-                    state["TOTAL_SUM_ALT"] = int(INITIAL_TOTAL_ENERGY)
-                    log(f"INFO: Setze initial TOTAL_SUM_ALT = INITIAL_TOTAL_ENERGY ({state['TOTAL_SUM_ALT']})")
-                return state
-            loaded = json.loads(raw)
-    except Exception as e:
-        log(f"❌ Fehler beim Lesen/Parsen von {SAVE_FILE}: {e}")
-        log("ℹ️  Erzeuge neuen State; vorhandene Datei wird nicht weiter verwendet.")
-        if INITIAL_TOTAL_ENERGY > 0:
-            state["TOTAL_SUM_ALT"] = int(INITIAL_TOTAL_ENERGY)
-            log(f"INFO: Setze initial TOTAL_SUM_ALT = INITIAL_TOTAL_ENERGY ({state['TOTAL_SUM_ALT']})")
-        return state
-
-    existing_total = None
-    try:
-        if isinstance(loaded, dict):
-            t = loaded.get("TOTAL_SUM_ALT")
-            if isinstance(t, (int, float)):
-                existing_total = int(t)
-            elif isinstance(t, str) and t.isdigit():
-                existing_total = int(t)
-            for dev in SMARTMETER_DEVICES:
-                dev_state = loaded.get(dev)
-                if isinstance(dev_state, dict):
-                    ms = {
-                        "MEAN_alt": int(dev_state.get("MEAN_alt", 0)),
-                        "SUM_berechnet": int(dev_state.get("SUM_berechnet", 0)),
-                        "SUM_alt2": int(dev_state.get("SUM_alt2", 0)),
-                        "stale_count": int(dev_state.get("stale_count", 0))
-                    }
-                    state[dev] = ms
-                else:
-                    state[dev] = defaults[dev]
-        else:
-            log("WARN: Inhalt der Statusdatei hat unerwarteten Typ -> neu erzeugen.")
-    except Exception as e:
-        log(f"❌ Fehler beim Verarbeiten der geladenen Statusdatei: {e}")
-        log("ℹ️  Erzeuge Default-State, sichere TOTAL_SUM_ALT falls vorhanden.")
-
-    if existing_total is not None:
-        last_total = existing_total
-        if INITIAL_TOTAL_ENERGY >= 0:
-            combined = max(last_total, int(INITIAL_TOTAL_ENERGY))
-            if combined != last_total:
-                log(f"INFO: TOTAL_SUM_ALT in Datei ({last_total}) < INITIAL_TOTAL_ENERGY ({INITIAL_TOTAL_ENERGY}). Setze TOTAL_SUM_ALT = {combined}")
-            last_total = combined
-    else:
-        if INITIAL_TOTAL_ENERGY > 0:
-            last_total = int(INITIAL_TOTAL_ENERGY)
-            log(f"INFO: Keine gültige TOTAL_SUM_ALT in Datei. Setze TOTAL_SUM_ALT = INITIAL_TOTAL_ENERGY ({last_total})")
-        else:
-            last_total = 0
-
-    state["TOTAL_SUM_ALT"] = int(last_total)
     return state
 
 
@@ -139,183 +66,132 @@ def save_state(state):
     try:
         with open(SAVE_FILE, "w") as f:
             json.dump(state, f)
-    except Exception as e:
-        log(f"Speichern der Werte fehlgeschlagen: {e}")
-
-
-def reset_counters(state):
-    now = datetime.now()
-    if now.hour == 0 and 5 <= now.minute <= 25:
-        for k, sm in state.items():
-            if isinstance(sm, dict):
-                sm["stale_count"] = 0
-        log("Tagesreset: Stale-Counter auf 0 gesetzt")
+    except Exception:
+        print("Fehler beim Speichern!")
 
 
 def try_direct_read(device_name, wait_seconds=60, attempt=1):
+    """Bei Strukturfehler: Direktabruf vom GEN24."""
     if wait_seconds > 0:
-        log(f"GEN24 Direktabruf: Warte {wait_seconds}s (Versuch {attempt})...")
+        print(f"{device_name}: Warte {wait_seconds}s vor Direktabruf (Versuch {attempt})...")
         time.sleep(wait_seconds)
 
     fresh = fetch_gen24_data()
-    if not fresh:
-        log("GEN24 Direktabruf: keine Daten erhalten.")
-        return None, None
-
     try:
-        devices = fresh.get("Body", {}).get("Data", {})
-        if device_name not in devices:
-            raise KeyError(f"Device {device_name} nicht in GEN24-Daten")
-        sm_data = devices[device_name]
-        channels = sm_data.get("channels", {})
-        raw_sum = channels.get("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64")
-        raw_mean = channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0)
-        if raw_sum is None:
-            raise KeyError("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64 nicht gefunden")
-        sm_sum = int(raw_sum)
-        sm_mean = int(raw_mean)
-        log(f"GEN24 Direktabruf: Device {device_name} → sum={sm_sum}, mean={sm_mean}")
+        channels = fresh[device_name]["channels"]
+
+        sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
+        sm_mean = int(channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0))
+
+        print(f"{device_name}: Direktabruf erfolgreich (Versuch {attempt})")
         return sm_sum, sm_mean
+
     except Exception as e:
-        log(f"GEN24 Direktabruf fehlgeschlagen für {device_name}: {e}")
+        print(f"{device_name}: Direktabruf fehlgeschlagen (Versuch {attempt}) → {e}")
         return None, None
 
 
-# ---------- Hauptfunktion ----------
+# ------------------------- Hauptfunktion -------------------------
+
 def get_API(data):
-    """
-    data: das übergebene JSON-Objekt vom anderen Script (erwartet neue Gen24-Struktur Body->Data)
-    Rückgabe: Fremd_API dict mit 'aktuellePVProduktion', 'AC_Produktion', 'DC_Produktion'
-    """
     state = load_state()
-    reset_counters(state)
     now = datetime.now()
 
     total_mean = 0
     total_sum = 0
 
-    devices = {}
-    try:
-        devices = data.get("Body", {}).get("Data", {}) or {}
-    except Exception as e:
-        log(f"Warn: übergebene 'data' hat keine Body/Data Struktur: {e}")
-        devices = {}
-
-    device_count = len(SMARTMETER_DEVICES)
-    if device_count == 0:
-        log("WARN: Keine SMARTMETER_DEVICES definiert - Abbruch.")
-        return {"aktuellePVProduktion": 0, "AC_Produktion": 0, "DC_Produktion": 0}
-
-    big_jump_threshold = 16000 * device_count
-    huge_jump_threshold = 32000 * device_count
-
     for device_name in SMARTMETER_DEVICES:
+
         sm_state = state.setdefault(
             device_name,
             {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
         )
 
-        sm_sum = None
-        sm_mean = None
+        # 1 — Erstes Lesen versuchen (übergebenes "data")
         try:
-            if device_name not in devices:
-                raise KeyError(f"Device '{device_name}' nicht in übergebenem data")
-            sm_entry = devices[device_name]
-            channels = sm_entry.get("channels", {})
-            raw_mean = channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0)
-            raw_sum = channels.get("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64")
-            if raw_sum is None:
-                raise KeyError("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64 fehlt")
-            sm_sum = int(raw_sum)
-            sm_mean = int(raw_mean)
-            log(f"SM {device_name}: gelesene Werte aus übergebenem data → sum={sm_sum}, mean={sm_mean}")
+            sm_data = data[device_name]
+            channels = sm_data["channels"]
         except Exception as e:
-            log(f"SM {device_name}: übergebenes data unvollständig/fehlerhaft → {e}")
-            sm_sum, sm_mean = try_direct_read(device_name, wait_seconds=5, attempt=1)
+            print(f"{device_name}: Strukturfehler → {e}")
+            # Direktabruf ausprobieren
+            sm_sum, sm_mean = try_direct_read(device_name, wait_seconds=20, attempt=1)
             if sm_sum is None:
-                sm_sum, sm_mean = try_direct_read(device_name, wait_seconds=5, attempt=2)
+                sm_sum, sm_mean = try_direct_read(device_name, wait_seconds=20, attempt=2)
             if sm_sum is None:
-                log(f"SM {device_name}: Direktabrufe lieferten keine brauchbaren Werte. Nutze Fallback aus State.")
-                sm_sum = int(sm_state.get("SUM_alt2", 0) or 0)
-                sm_mean = int(sm_state.get("MEAN_alt", 0) or 0)
+                # finaler Fallback
+                print(f"{device_name}: Fallback genutzt – alte Werte")
+                sm_sum = sm_state["SUM_alt2"]
+                sm_mean = sm_state["MEAN_alt"]
+        else:
+            # Werte aus übergebenen Daten
+            sm_mean = int(channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0))
+            try:
+                sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
+            except:
+                sm_sum, sm_mean = try_direct_read(device_name, wait_seconds=20, attempt=1)
 
-        # Erste Initialisierung pro Smartmeter
+        # ---------- Initialisierung ----------
         if sm_state["SUM_berechnet"] == 0 and sm_state["SUM_alt2"] == 0:
-            log(f"SM {device_name}: Erste Initialisierung der gespeicherten Zähler → übernehme {sm_sum}")
-            sm_state["SUM_berechnet"] = int(sm_sum)
-            sm_state["SUM_alt2"] = int(sm_sum)
+            print(f"{device_name}: Erste Initialisierung → {sm_sum}")
+            sm_state["SUM_berechnet"] = sm_sum
+            sm_state["SUM_alt2"] = sm_sum
 
-        # Stale-Check tagsüber
+        # ---------- Stale-Detection ----------
         if sm_sum == sm_state["SUM_alt2"] and 8 <= now.hour < 18:
-            sm_state["stale_count"] = int(sm_state.get("stale_count", 0)) + 1
-            log(f"SM {device_name}: unverändert, Zähler = {sm_state['stale_count']}")
-            sm_sum = int(sm_state["SUM_berechnet"] + sm_mean / 6)
-            sm_state["SUM_berechnet"] = int(sm_sum)
+            sm_state["stale_count"] += 1
+            print(f"{device_name}: unverändert, Zähler = {sm_state['stale_count']}")
+            sm_sum = int(sm_state["SUM_berechnet"] + sm_mean / 8)
+            sm_state["SUM_berechnet"] = sm_sum
 
-        # Prüfungen für sm_mean
-        if Summenpruefung_aktiv:
-            if 0 <= sm_mean < (Leistung_WR + 500):
-                sm_state["MEAN_alt"] = int(sm_mean)
-            else:
-                log(f"SM {device_name}: sm_mean ausserhalb Grenzbereich ({sm_mean}). Nutze alten MEAN_alt={sm_state['MEAN_alt']}")
-                sm_mean = int(sm_state["MEAN_alt"])
+        # ---------- MEAN Logik ----------
+        if 0 <= sm_mean < Leistung_WR:
+            sm_state["MEAN_alt"] = sm_mean
         else:
-            sm_state["MEAN_alt"] = int(sm_mean or 0)
-            sm_mean = int(sm_state["MEAN_alt"])
+            sm_mean = sm_state["MEAN_alt"]
 
-        # Prüfungen für sm_sum
-        if Summenpruefung_aktiv:
-            low_bound = min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
-            high_bound = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + big_jump_threshold
-            if low_bound <= sm_sum <= high_bound:
-                sm_state["SUM_alt2"] = int(sm_sum)
-            elif (low_bound - 800) <= sm_sum <= low_bound:
-                log(f"SM {device_name}: kleiner Zurücksprung erkannt ({sm_sum}). Korrigiere auf max gespeicherter Wert.")
-                sm_sum = int(max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]))
-            else:
-                old_sum = sm_sum
-                sm_sum = int(max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + sm_state["MEAN_alt"] / 6)
-                log(f"SM {device_name}: Fehler Summenwert ({old_sum}), nutze Fallback → neuer Wert = {sm_sum}")
+        # ---------- Summenprüfung ----------
+        if (min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) <= sm_sum <=
+            max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + Leistung_WR*2):
+            sm_state["SUM_alt2"] = sm_sum
         else:
-            sm_state["SUM_alt2"] = int(sm_sum)
+            old = sm_sum
+            sm_sum = int(max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) +
+                         sm_state["MEAN_alt"] / 8)
+            print(f"{device_name}: Fehler Summenwert ({old}) → Fallback {sm_sum}")
 
-        # SUM_berechnet nur erhöhen wenn plausibel
         if sm_sum > sm_state["SUM_berechnet"]:
-            sm_state["SUM_berechnet"] = int(sm_sum)
+            sm_state["SUM_berechnet"] = sm_sum
 
-        total_mean += int(sm_mean)
-        total_sum += int(sm_sum)
+        total_mean += sm_mean
+        total_sum += sm_sum
 
-    # 2. Sicherheit: Gesamt-Summen-Prüfung
-    last_total = int(state.get("TOTAL_SUM_ALT", 0) or 0)
+    # ---------------------- Gesamt-Sicherheitslogik ----------------------
 
-    # Einmalige Initialisierung
-    if last_total == 0 and INITIAL_TOTAL_ENERGY >= 0:
-        log(f"Einmalige Initialisierung TOTAL_SUM_ALT = {int(INITIAL_TOTAL_ENERGY)}")
-        last_total = int(INITIAL_TOTAL_ENERGY)
+    last_total = state.get("TOTAL_SUM_ALT", 0)
+
+    # >>> EINMALIGE INITIALISIERUNG <<<
+    if last_total == 0 and INITIAL_TOTAL_ENERGY != 0:
+        print(f"Einmalige Initialisierung TOTAL_SUM_ALT = {INITIAL_TOTAL_ENERGY}")
+        last_total = INITIAL_TOTAL_ENERGY
 
     if total_sum < last_total:
-        log(f"⚠️ Gesamtenergie rückläufig ({total_sum} < {last_total}) → verwende alten Wert {last_total}")
         total_sum = last_total
-    elif total_sum > last_total + huge_jump_threshold:
-        log(f"⚠️ Gesamtenergie-Sprung zu groß (+{total_sum - last_total} > {huge_jump_threshold}) → verwende alten Wert {last_total}")
+    elif total_sum > last_total + len(SMARTMETER_DEVICES)*Leistung_WR:
         total_sum = last_total
-    elif total_sum > last_total + big_jump_threshold:
-        cap = last_total + big_jump_threshold
-        log(f"⚠️ Gesamtenergie-Sprung groß (+{total_sum - last_total}). Reduziere auf {cap}")
-        total_sum = cap
+    elif total_sum > last_total + len(SMARTMETER_DEVICES)*Leistung_WR*0.12:
+        total_sum = last_total + len(SMARTMETER_DEVICES)*Leistung_WR*0.12
 
-    state["TOTAL_SUM_ALT"] = int(total_sum)
+    state["TOTAL_SUM_ALT"] = total_sum
     save_state(state)
 
+    # ---------------------- Ausgabe ----------------------
     Fremd_API = {
-        "aktuellePVProduktion": int(total_mean),
-        "AC_Produktion": int(total_sum),
-        "DC_Produktion": int(total_sum * 1.05),
+        "aktuellePVProduktion": total_mean,
+        "AC_Produktion": total_sum,
+        "DC_Produktion": int(total_sum * 1.05)
     }
 
-    log("--- Rückgabe an aufrufendes Script ---")
-    log(f"GesamtProduktionSM: {Fremd_API['aktuellePVProduktion']}")
-    log(f"GesamtEnergieSM: {Fremd_API['AC_Produktion']}")
+    print("\nGesamtProduktionSM:", Fremd_API["aktuellePVProduktion"])
+    print("GesamtEnergieSM:", Fremd_API["AC_Produktion"], "\n")
 
     return Fremd_API
