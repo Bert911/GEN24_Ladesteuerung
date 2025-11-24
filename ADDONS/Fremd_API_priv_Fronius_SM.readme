@@ -4,10 +4,10 @@ import requests
 import time
 from datetime import datetime
 
-# Mapping alte SM-ID → neue GEN24-Device-ID
+# Mapping alte ID → GEN24 Device-ID
 SMARTMETER_MAP = {
     "16252931": "Fronius_SmartMeter_2223836ab422",
-    "16711682": "Fronius_SmartMeter_4d68ed529a2d"   # <- bitte anpassen!
+    "16711682": "Fronius_SmartMeter_4d68ed529a2d"
 }
 
 SMARTMETER_IDS = list(SMARTMETER_MAP.keys())
@@ -17,140 +17,124 @@ GEN24_IP = "192.168.178.42"
 GEN24_URL = f"http://{GEN24_IP}/components/readable"
 
 
-# ---------- Hilfsfunktionen ----------
+# ---------- GEN24 abrufen, mit 3 Retries ----------
 
-def fetch_gen24_data():
-    try:
-        response = requests.get(GEN24_URL, timeout=5)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        print(f"Fehler beim Abrufen der Daten von GEN24: {e}")
-        return {}
+def fetch_gen24_data_retry(max_retries=3, pause=0.3):
+    """Holt GEN24 JSON mit Retry, um unvollständige Blöcke abzufangen."""
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.get(GEN24_URL, timeout=5)
+            resp.raise_for_status()
+            data = resp.json()
 
+            # Prüfen, ob alle Smartmeter-Blöcke da sind
+            missing = [
+                dev for dev in SMARTMETER_MAP.values()
+                if dev not in data
+            ]
+
+            if not missing:
+                if attempt > 1:
+                    print(f"GEN24: Erfolg nach Retry #{attempt}.")
+                return data
+
+            print(f"GEN24: Smartmeter fehlen ({missing}) → Retry {attempt}/{max_retries}")
+            time.sleep(pause)
+
+        except Exception as e:
+            print(f"GEN24: Fehler beim Abrufen (Versuch {attempt}) → {e}")
+            time.sleep(pause)
+
+    print("GEN24: ⚠️ Auch nach Retries unvollständig. Nutze übergebene Daten oder Fallback.")
+    return None
+
+
+# ---------- State laden/speichern ----------
 
 def load_state():
     if os.path.exists(SAVE_FILE):
         try:
             with open(SAVE_FILE, "r") as f:
                 return json.load(f)
-        except Exception as e:
-            print(f"Laden der alten Werte fehlgeschlagen: {e}")
+        except:
+            pass
 
-    state = {
-        sm_id: {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
-        for sm_id in SMARTMETER_IDS
-    }
+    state = {sm: {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
+             for sm in SMARTMETER_IDS}
     state["TOTAL_SUM_ALT"] = 0
     return state
 
 
 def save_state(state):
-    try:
-        with open(SAVE_FILE, "w") as f:
-            json.dump(state, f)
-    except Exception as e:
-        print(f"Speichern der Werte fehlgeschlagen: {e}")
-
-
-def reset_counters(state):
-    now = datetime.now()
-    if now.hour == 0 and 5 <= now.minute <= 25:
-        for sm in state.values():
-            if isinstance(sm, dict):
-                sm["stale_count"] = 0
-        print("Tagesreset: Stale-Counter auf 0 gesetzt")
-
-
-def try_direct_read(sm_id, wait_seconds=60, attempt=1):
-    if wait_seconds > 0:
-        print(f"SM {sm_id}: Warte {wait_seconds} Sekunden vor Direktabruf (Versuch {attempt})...")
-        time.sleep(wait_seconds)
-
-    fresh_data = fetch_gen24_data()
-    try:
-        device_name = SMARTMETER_MAP[sm_id]
-        sm_data = fresh_data[device_name]
-        channels = sm_data["channels"]
-
-        sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
-        sm_mean = int(channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0))
-
-        print(f"SM {sm_id}: Direktabruf erfolgreich (Versuch {attempt}).")
-        return sm_sum, sm_mean
-
-    except Exception as e:
-        print(f"SM {sm_id}: Direktabruf fehlgeschlagen (Versuch {attempt}) → {e}")
-        return None, None
+    with open(SAVE_FILE, "w") as f:
+        json.dump(state, f)
 
 
 # ---------- Hauptfunktion ----------
 
-def get_API(data):
+def get_API(data_from_other_script):
+    """
+    Jetzt NEU:
+    1) Versuch GEN24 direkt → bevorzugt!
+    2) Wenn GEN24 JSON unvollständig → nutze übergebene Daten
+    """
+
     state = load_state()
-    reset_counters(state)
     now = datetime.now()
+
+    # 1) GEN24 direkt abrufen
+    print("\n--- STARTE DIREKTABRUF GEN24 ---")
+    gen24_data = fetch_gen24_data_retry()
+
+    if gen24_data is None:
+        print("GEN24 liefert keine vollständigen Daten → nutze übergebenes 'data'.")
+        data = data_from_other_script
+    else:
+        print("GEN24 Daten OK → nutze Direktdaten.")
+        data = gen24_data
 
     total_mean, total_sum = 0, 0
 
     for sm_id in SMARTMETER_IDS:
-        sm_state = state.setdefault(
-            sm_id,
-            {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
-        )
+        dev_name = SMARTMETER_MAP[sm_id]
+        sm_state = state[sm_id]
 
-        # --- neue GEN24 Struktur ---
-        try:
-            device_name = SMARTMETER_MAP[sm_id]
-            sm_data = data[device_name]
-            channels = sm_data["channels"]
-        except Exception as e:
-            print(f"SM {sm_id}: Strukturfehler → {e}")
+        # Struktur prüfen
+        if dev_name not in data:
+            print(f"SM {sm_id}: ❌ Device '{dev_name}' NICHT im verwendeten JSON!")
+            print(f"→ Fallback: Werte werden NICHT aktualisiert.")
             continue
 
-        try:
-            sm_mean = int(channels["SMARTMETER_POWERACTIVE_MEAN_SUM_F64"])
-        except:
-            sm_mean = 0
+        channels = data[dev_name]["channels"]
 
-        try:
-            sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
-        except:
-            sm_sum, sm_mean = try_direct_read(sm_id, wait_seconds=60, attempt=1)
-            if sm_sum is None:
-                sm_sum, sm_mean = try_direct_read(sm_id, wait_seconds=60, attempt=2)
-            if sm_sum is None:
-                print("Fallback genutzt.")
-                sm_sum = sm_state["SUM_alt2"]
-                sm_mean = sm_state["MEAN_alt"]
+        # sm_mean
+        sm_mean = int(channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", sm_state["MEAN_alt"]))
 
-        # --- erste Initialisierung ---
-        if sm_state["SUM_berechnet"] == 0 and sm_state["SUM_alt2"] == 0:
+        # sm_sum
+        sm_sum = int(channels.get("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64", sm_state["SUM_alt2"]))
+
+        # --- Erste Initialisierung ---
+        if sm_state["SUM_berechnet"] == 0:
             print(f"SM {sm_id}: Erste Initialisierung → {sm_sum}")
             sm_state["SUM_berechnet"] = sm_sum
             sm_state["SUM_alt2"] = sm_sum
 
-        if sm_sum == sm_state["SUM_alt2"] and 8 <= now.hour < 18:
-            sm_state["stale_count"] += 1
-            print(f"SM {sm_id}: unverändert, Zähler = {sm_state['stale_count']}")
-            sm_sum = int(sm_state["SUM_berechnet"] + sm_mean / 8)
-            sm_state["SUM_berechnet"] = sm_sum
-
+        # Wertebereich prüfen
         if 0 <= sm_mean < 8000:
             sm_state["MEAN_alt"] = sm_mean
         else:
             sm_mean = sm_state["MEAN_alt"]
 
-        if (min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
-            <= sm_sum
-            <= (max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + 16000)):
+        # sm_sum Plausibilität
+        plausible_min = min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) - 800
+        plausible_max = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + 16000
+
+        if plausible_min <= sm_sum <= plausible_max:
             sm_state["SUM_alt2"] = sm_sum
-        elif (min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) - 800) <= sm_sum:
-            sm_sum = int(max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]))
         else:
-            old_sum = sm_sum
-            sm_sum = int(max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + sm_state["MEAN_alt"] / 8)
-            print(f"SM {sm_id}: Fehler Summenwert ({old_sum}), Fallback → {sm_sum}")
+            old = sm_sum
+            sm_sum = int(max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + sm_mean / 8)
+            print(f"SM {sm_id}: ❗ Fehlerhafter Summenwert {old} → Fallback {sm_sum}")
 
         if sm_sum > sm_state["SUM_berechnet"]:
             sm_state["SUM_berechnet"] = sm_sum
@@ -158,28 +142,27 @@ def get_API(data):
         total_mean += sm_mean
         total_sum += sm_sum
 
-    # Gesamt-Sicherheitslogik
-    last_total = state.get("TOTAL_SUM_ALT", 0)
+    # Sicherung
+    last_total = state["TOTAL_SUM_ALT"]
 
-    if last_total == 0:
-        print(f"Erster Start → TOTAL_SUM_ALT = {total_sum}")
-    elif total_sum < last_total:
-        total_sum = last_total
-    elif total_sum > last_total + 32000:
-        total_sum = last_total
-    elif total_sum > last_total + 1600:
-        total_sum = last_total + 1600
+    if last_total != 0:
+        if total_sum < last_total:
+            total_sum = last_total
+        elif total_sum > last_total + 16000:
+            total_sum = last_total + 16000
 
     state["TOTAL_SUM_ALT"] = total_sum
     save_state(state)
 
+    # API-Ausgabe
     Fremd_API = {
         "aktuellePVProduktion": total_mean,
         "AC_Produktion": total_sum,
         "DC_Produktion": int(total_sum * 1.05),
     }
 
-    print("\nGesamtProduktionSM:", Fremd_API["aktuellePVProduktion"])
+    print("\n--- ERGEBNIS ---")
+    print("GesamtProduktionSM:", Fremd_API["aktuellePVProduktion"])
     print("GesamtEnergieSM:", Fremd_API["AC_Produktion"], "\n")
 
     return Fremd_API
