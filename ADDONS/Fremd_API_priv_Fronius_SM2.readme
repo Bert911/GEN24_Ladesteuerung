@@ -24,6 +24,7 @@ def fetch_gen24_data():
 
 
 def load_state():
+    """Lädt den letzten Zustand oder setzt Defaults."""
     if os.path.exists(SAVE_FILE):
         try:
             with open(SAVE_FILE, "r") as f:
@@ -31,10 +32,13 @@ def load_state():
         except Exception as e:
             print(f"Laden der alten Werte fehlgeschlagen: {e}")
 
-    return {
+    # Defaults falls Datei fehlt oder defekt
+    state = {
         sm_id: {"MEAN_alt": 0, "SUM_berechnet": 0, "SUM_alt2": 0, "stale_count": 0}
         for sm_id in SMARTMETER_IDS
     }
+    state["TOTAL_SUM_ALT"] = 0
+    return state
 
 
 def save_state(state):
@@ -50,11 +54,12 @@ def reset_counters(state):
     now = datetime.now()
     if now.hour == 0 and 5 <= now.minute <= 25:
         for sm in state.values():
-            sm["stale_count"] = 0
+            if isinstance(sm, dict):  # nur echte Smartmeter, nicht TOTAL_SUM_ALT
+                sm["stale_count"] = 0
         print("Tagesreset: Stale-Counter auf 0 gesetzt")
 
 
-def try_direct_read(sm_id, wait_seconds=15, attempt=1):
+def try_direct_read(sm_id, wait_seconds=60, attempt=1):
     """Versucht einen Direktabruf vom GEN24 für ein Smartmeter."""
     if wait_seconds > 0:
         print(f"SM {sm_id}: Warte {wait_seconds} Sekunden vor Direktabruf (Versuch {attempt})...")
@@ -112,33 +117,72 @@ def get_API(data):
             sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
         except Exception as e:
             print(f"SM {sm_id}: Fehler bei sm_sum → {e}. Starte Direktabruf...")
-            sm_sum, sm_mean = try_direct_read(sm_id, wait_seconds=15, attempt=1)
+            sm_sum, sm_mean = try_direct_read(sm_id, wait_seconds=60, attempt=1)
 
             if sm_sum is None:
-                sm_sum, sm_mean = try_direct_read(sm_id, wait_seconds=15, attempt=2)
+                sm_sum, sm_mean = try_direct_read(sm_id, wait_seconds=60, attempt=2)
 
             if sm_sum is None:
                 print(f"SM {sm_id}: auch nach 2 Direktabrufen nicht lesbar. Nutze Fallback.")
-                sm_sum = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
-                sm_mean = 0
+                sm_sum = sm_state["SUM_alt2"]
+                sm_mean = sm_state["MEAN_alt"]
 
-        # --- Berechnete Summenwerte ---
-        sm_sum_used = sm_sum
+        # --- Erste Initialisierung ---
+        if sm_state["SUM_berechnet"] == 0 and sm_state["SUM_alt2"] == 0:
+            print(f"SM {sm_id}: Erste Initialisierung → übernehme aktuellen Wert {sm_sum}")
+            sm_state["SUM_berechnet"] = sm_sum
+            sm_state["SUM_alt2"] = sm_sum
 
+        # Stale-Check tagsüber
         if sm_sum == sm_state["SUM_alt2"] and 8 <= now.hour < 18:
             sm_state["stale_count"] += 1
             print(f"SM {sm_id}: unverändert, Zähler = {sm_state['stale_count']}")
-            sm_sum_used = sm_state["SUM_berechnet"] + sm_mean // 6
+            sm_sum = int(sm_state["SUM_berechnet"] + sm_mean / 8)
+            sm_state["SUM_berechnet"] = sm_sum
 
-        if sm_sum > sm_state["SUM_alt2"]:
+        # Wertebereich für sm_mean prüfen
+        if 0 <= sm_mean < 8000:
+            sm_state["MEAN_alt"] = sm_mean
+        else:
+            print(f"SM {sm_id}: Fehler Produktionswert ({sm_mean}), nutze alten Wert.")
+            sm_mean = sm_state["MEAN_alt"]
+
+        # Wertebereich für sm_sum prüfen
+        if (min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
+            <= sm_sum
+            <= (max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + 16000)):
             sm_state["SUM_alt2"] = sm_sum
+        elif ((min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) - 800) <= sm_sum):
+            sm_sum = int(max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]))
+        else:
+            old_sum = sm_sum
+            sm_sum = int(max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"]) + sm_state["MEAN_alt"] / 8)
+            print(f"SM {sm_id}: Fehler Summenwert ({old_sum}), nutze Fallback → neuer Wert = {sm_sum}")
 
-        sm_state["MEAN_alt"] = sm_mean
-        sm_state["SUM_berechnet"] = sm_sum_used
+        # SUM_berechnet nur erhöhen, wenn neuer Wert plausibel größer ist
+        if sm_sum > sm_state["SUM_berechnet"]:
+            sm_state["SUM_berechnet"] = sm_sum
 
         total_mean += sm_mean
-        total_sum += sm_sum_used
+        total_sum += sm_sum
 
+    # ---- 2. Sicherheit: total_sum Plausibilitätsprüfung ----
+    last_total = state.get("TOTAL_SUM_ALT", 0)
+
+    if last_total == 0:
+        # Erster Start: aktuellen Wert übernehmen
+        print(f"Erster Start erkannt → setze TOTAL_SUM_ALT = {total_sum}")
+    elif total_sum < last_total:
+        print(f"⚠️ Gesamtenergie rückläufig ({total_sum} < {last_total}), nutze alten Wert.")
+        total_sum = last_total
+    elif total_sum > last_total + 32000:
+        print(f"⚠️ Gesamtenergie-Sprung zu deutlich groß (+{total_sum - last_total}), nutze alten Wert.")
+        total_sum = last_total
+    elif total_sum > last_total + 1600:
+        print(f"⚠️ Gesamtenergie-Sprung zu groß (+{total_sum - last_total}), nutze reduzierten Wert.")
+        total_sum = last_total + 1600
+
+    state["TOTAL_SUM_ALT"] = total_sum
     save_state(state)
 
     Fremd_API = {
