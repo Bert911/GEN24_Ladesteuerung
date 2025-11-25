@@ -134,8 +134,7 @@ def try_direct_read(smartmeter_name, wait_seconds=20, attempt=1):
         print(f"{smartmeter_name}: Warte {wait_seconds}s vor Direktabruf (Versuch {attempt})...")
         time.sleep(wait_seconds)
 
-    fresh = fetch_gen24_data()
-    smartmeter_map = extract_devices_struct(fresh)
+    smartmeter_map = extract_devices_struct(fetch_gen24_data())
 
     try:
         # robuster Zugriff: falls device nicht vorhanden -> KeyError -> except
