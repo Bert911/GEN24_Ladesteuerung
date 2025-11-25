@@ -148,11 +148,11 @@ def try_direct_read(smartmeter_name, wait_seconds=20, attempt=1):
         time.sleep(wait_seconds)
 
     fresh = fetch_gen24_data()
-    devices = extract_devices_struct(fresh)
+    smartmeter_map = extract_devices_struct(fresh)
 
     try:
         # robuster Zugriff: falls device nicht vorhanden -> KeyError -> except
-        channels = devices[smartmeter_name]["channels"]
+        channels = smartmeter_map[smartmeter_name]["channels"]
 
         sm_energy_raw = channels.get("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64")
         sm_power_raw = channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0)
@@ -183,14 +183,14 @@ def get_API(data):
     energy_total = 0
 
     # Geräte aus der übergebenen Struktur extrahieren (robust gegenüber unterschiedlichen Formen)
-    devices = extract_devices_struct(data)
+    smartmeter_map = extract_devices_struct(data)
 
     for device_name in smartmeter_devices:
         sm_state = state[device_name]
 
         # ----------- Zugriff auf übergebene Data-Struktur -----------
         try:
-            sm_data = devices.get(device_name, {})
+            sm_data = smartmeter_map.get(device_name, {})
             channels = sm_data.get("channels", {}) if isinstance(sm_data, dict) else {}
         except Exception as e:
             print(f"{device_name}: Strukturfehler in externer Data → {e}")
