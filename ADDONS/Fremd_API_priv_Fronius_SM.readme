@@ -85,7 +85,7 @@ def load_state():
                         state["energy_last_total"] = energy_initial_total
 
                     # alle Smartmeter in richtige Struktur bringen
-                    changed = False
+                    structure_corrected = False
                     for dev in SMARTMETER_DEVICES:
                         if dev not in state or not isinstance(state.get(dev), dict):
                             print(f"{dev}: alte oder ungültige Struktur → wird neu initialisiert.")
@@ -95,9 +95,9 @@ def load_state():
                                 "energy_last2": 0,      # letzter echter Zählerstand
                                 "stale_count": 0    # unverändert-Zähler
                             }
-                            changed = True
+                            structure_corrected = True
 
-                    if changed:
+                    if structure_corrected:
                         print("Strukturfehler korrigiert – State wurde überarbeitet.")
 
                     return state
