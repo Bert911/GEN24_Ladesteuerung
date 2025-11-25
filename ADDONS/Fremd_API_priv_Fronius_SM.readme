@@ -67,7 +67,7 @@ def extract_devices_struct(data):
 
 def load_state():
     """State aus Datei laden. Bei Fehlern, leeren Dateien oder veralteter Struktur wird ein neuer State erzeugt.
-       energy_total_ALT wird automatisch auf einen sicheren Startwert gesetzt."""
+       energy_last_total wird automatisch auf einen sicheren Startwert gesetzt."""
 
     if os.path.exists(SAVE_FILE):
         try:
@@ -78,11 +78,14 @@ def load_state():
                 else:
                     state = json.loads(content)
 
-                    # Datei vorhanden & lesbar → energy_total_ALT korrekt initialisieren
-                    alt = state.get("energy_total_ALT", 0)
+                    # Datei vorhanden & lesbar → energy_last_total korrekt initialisieren
+                    alt = state.get("energy_last_total", 0)
                     if alt < energy_initial_total:
-                        print(f"energy_total_ALT aktualisiert auf Initialwert {energy_initial_total}")
-                        state["energy_total_ALT"] = energy_initial_total
+
+########################################if state.get("energy_last_total", 0) < energy_initial_total:
+
+                        print(f"energy_last_total aktualisiert auf Initialwert {energy_initial_total}")
+                        state["energy_last_total"] = energy_initial_total
 
                     # alle Smartmeter in richtige Struktur bringen
                     changed = False
@@ -90,9 +93,9 @@ def load_state():
                         if dev not in state or not isinstance(state.get(dev), dict):
                             print(f"{dev}: alte oder ungültige Struktur → wird neu initialisiert.")
                             state[dev] = {
-                                "power_alt": 0,      # letzter gültiger Leistungswert
+                                "power_last": 0,      # letzter gültiger Leistungswert
                                 "energy_berechnet": 0, # berechnete Energiesumme
-                                "energy_alt2": 0,      # letzter echter Zählerstand
+                                "energy_last2": 0,      # letzter echter Zählerstand
                                 "stale_count": 0    # unverändert-Zähler
                             }
                             changed = True
@@ -109,15 +112,15 @@ def load_state():
     print("Erzeuge neuen State...")
     state = {
         dev: {
-            "power_alt": 0,
+            "power_last": 0,
             "energy_berechnet": 0,
-            "energy_alt2": 0,
+            "energy_last2": 0,
             "stale_count": 0
         }
         for dev in SMARTMETER_DEVICES
     }
-    state["energy_total_ALT"] = energy_initial_total
-    print(f"energy_total_ALT initial auf {energy_initial_total} gesetzt.")
+    state["energy_last_total"] = energy_initial_total
+    print(f"energy_last_total initial auf {energy_initial_total} gesetzt.")
     return state
 
 
@@ -227,17 +230,17 @@ def get_API(data):
         # Wenn immer noch kein Wert → Fallback auf gespeicherten State
         if sm_energy is None:
             print(f"{device_name}: Fallback genutzt – alte Werte.")
-            sm_energy = sm_state.get("energy_alt2", 0)
-            sm_power = sm_state.get("power_alt", 0)
+            sm_energy = sm_state.get("energy_last2", 0)
+            sm_power = sm_state.get("power_last", 0)
 
         # ---------- Erste Initialisierung ----------
-        if sm_state["energy_berechnet"] == 0 and sm_state["energy_alt2"] == 0:
+        if sm_state["energy_berechnet"] == 0 and sm_state["energy_last2"] == 0:
             print(f"{device_name}: Erste Initialisierung → {sm_energy}")
             sm_state["energy_berechnet"] = sm_energy
-            sm_state["energy_alt2"] = sm_energy
+            sm_state["energy_last2"] = sm_energy
 
         # ---------- Stale Detection ----------
-        if sm_energy == sm_state["energy_alt2"] and 8 <= now.hour < 18:
+        if sm_energy == sm_state["energy_last2"] and 8 <= now.hour < 18:
             sm_state["stale_count"] += 1
             print(f"{device_name}: unverändert, Zähler = {sm_state['stale_count']}")
             # sm_power kann 0 sein; Division int ok
@@ -246,23 +249,23 @@ def get_API(data):
 
         # ---------- Prüfung Power ----------
         if sm_power is not None and 0 <= sm_power < Leistung_WR:
-            sm_state["power_alt"] = sm_power
+            sm_state["power_last"] = sm_power
         else:
             print(f"{device_name}: Fehler Produktionswert ({sm_power}), nutze alten Wert.")
-            sm_power = sm_state["power_alt"]
+            sm_power = sm_state["power_last"]
 
         # ---------- Prüfung Summe----------
         if Summenpruefung_aktiv:
-            min_val = min(sm_state["energy_berechnet"], sm_state["energy_alt2"])
-            max_val = max(sm_state["energy_berechnet"], sm_state["energy_alt2"])
+            min_val = min(sm_state["energy_berechnet"], sm_state["energy_last2"])
+            max_val = max(sm_state["energy_berechnet"], sm_state["energy_last2"])
 
             if min_val <= sm_energy <= (max_val + Leistung_WR * 2):
-                sm_state["energy_alt2"] = sm_energy
+                sm_state["energy_last2"] = sm_energy
             elif (min_val - 800) <= sm_energy:
                 sm_energy = int(max_val)
             else:
                 old = sm_energy
-                sm_energy = int(max_val + sm_state["power_alt"] / 8)
+                sm_energy = int(max_val + sm_state["power_last"] / 8)
                 print(f"{device_name}: Fehler Summenwert ({old}) → Fallback {sm_energy}")
 
         # ---------- energy_berechnet aktualisieren ----------
@@ -274,10 +277,10 @@ def get_API(data):
 
 # ---------------------- Gesamt-Sicherheitslogik ----------------------
 
-    last_total = state.get("energy_total_ALT", 0)
+    last_total = state.get("energy_last_total", 0)
     if Summenpruefung_aktiv:
         if last_total == 0:
-            print(f"Erster Start → energy_total_ALT = {energy_total}")
+            print(f"Erster Start → energy_last_total = {energy_total}")
 
         elif energy_total < last_total:
             print(f"⚠️ Gesamtenergie rückläufig ({energy_total} < {last_total}) → nutze alten Wert.")
@@ -298,7 +301,7 @@ def get_API(data):
             )
             energy_total = last_total + 1600
 
-    state["energy_total_ALT"] = energy_total
+    state["energy_last_total"] = energy_total
     save_state(state)
 
     # ---------------------- Ausgabe ----------------------
