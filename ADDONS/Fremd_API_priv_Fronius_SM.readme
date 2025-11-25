@@ -79,10 +79,7 @@ def load_state():
                     state = json.loads(content)
 
                     # Datei vorhanden & lesbar → energy_last_total korrekt initialisieren
-                    alt = state.get("energy_last_total", 0)
-                    if alt < energy_initial_total:
-
-########################################if state.get("energy_last_total", 0) < energy_initial_total:
+                    if state.get("energy_last_total", 0) < energy_initial_total:
 
                         print(f"energy_last_total aktualisiert auf Initialwert {energy_initial_total}")
                         state["energy_last_total"] = energy_initial_total
