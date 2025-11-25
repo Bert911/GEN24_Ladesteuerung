@@ -8,10 +8,9 @@ from datetime import datetime
 # >>>>>>>>  Hier Änderungen vornehmen  >>>>>>>>>>>>>>>>>>>>>
 # Ganz unten stehen weitere Tipps bei Verbindungs- und Datenproblemen.
 
-energy_initial_total = 12694835              # EINMALIGER Startwert (manuell setzen)
+energy_initial_total = 12696496              # EINMALIGER Startwert (manuell setzen)
 #                                              Gesamtproduktionswert aller Smartmeter in Wh
 #                                              wird als letzte Sicherheit genutzt und nicht aktualisiert
-
 
 smartmeter_devices = [                       # Smartmeter-Device-Namen (neue GEN24-Struktur ab Firmware 1.39.5-1)
     "Fronius_SmartMeter_2223836ab422",       # inkompatibel mit vorheriger Firmware
