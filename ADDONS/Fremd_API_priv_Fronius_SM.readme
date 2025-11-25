@@ -274,29 +274,29 @@ def get_API(data):
 
 # ---------------------- Gesamt-Sicherheitslogik ----------------------
 
-    last_total = state.get("energy_last_total", 0)
+    energy_last_total = state.get("energy_last_total", 0)
     if Summenpruefung_aktiv:
-        if last_total == 0:
+        if energy_last_total == 0:
             print(f"Erster Start → energy_last_total = {energy_total}")
 
-        elif energy_total < last_total:
-            print(f"⚠️ Gesamtenergie rückläufig ({energy_total} < {last_total}) → nutze alten Wert.")
-            energy_total = last_total
+        elif energy_total < energy_last_total:
+            print(f"⚠️ Gesamtenergie rückläufig ({energy_total} < {energy_last_total}) → nutze alten Wert.")
+            energy_total = energy_last_total
 
         # ----------- Tagesgrenze (Max_Energiesprung_Tag) -----------
-        elif Max_Energiesprung_Tag > 0 and energy_total > last_total + 32000:
-            diff = energy_total - last_total
+        elif Max_Energiesprung_Tag > 0 and energy_total > energy_last_total + 32000:
+            diff = energy_total - energy_last_total
             print(f"⚠️ Gesamtenergie-Sprung viel zu groß (+{diff} Wh, maximal erlaubt +{Max_Energiesprung_Tag} Wh) → verworfen.")
-            energy_total = last_total
+            energy_total = energy_last_total
 
         # ----------- Einzelabrufgrenze (Max_Energiesprung) -----------
-        elif Max_Energiesprung > 0 and energy_total > last_total + 1600:
-            diff = energy_total - last_total
+        elif Max_Energiesprung > 0 and energy_total > energy_last_total + 1600:
+            diff = energy_total - energy_last_total
             print(
                 f"⚠️ Gesamtenergie-Sprung moderat groß (+{diff} Wh, maximal erlaubt +{Max_Energiesprung} Wh) "
                 f"→ begrenzt auf +{Max_Energiesprung} Wh."
             )
-            energy_total = last_total + 1600
+            energy_total = energy_last_total + 1600
 
     state["energy_last_total"] = energy_total
     save_state(state)
