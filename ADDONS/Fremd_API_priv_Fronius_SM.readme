@@ -13,7 +13,7 @@ energy_initial_total = 12694835             # EINMALIGER Startwert (manuell setz
 #                                           wird als letzte Sicherheit genutzt und nicht aktualisiert
 
 
-SMARTMETER_DEVICES = [                      # Smartmeter-Device-Namen (neue GEN24-Struktur ab Firmware 1.39.5-1)
+smartmeter_devices = [                      # Smartmeter-Device-Namen (neue GEN24-Struktur ab Firmware 1.39.5-1)
     "Fronius_SmartMeter_2223836ab422",      # inkompatibel mit vorheriger Firmware
     "Fronius_SmartMeter_4d68ed529a2d"
 ]
@@ -51,7 +51,7 @@ def extract_devices_struct(data):
         data["Body"]["Data"]
         data["Data"]
         direkt data (falls schon vorverarbeitet)
-    Gibt die devices (device_name -> {attributes, channels, ...}) zurück.
+    Gibt die Smartmeter (Smartmeter_name -> {attributes, channels, ...}) zurück.
     """
     if isinstance(data, dict):
         # Fall: komplette API-Antwort mit Body->Data
@@ -86,10 +86,10 @@ def load_state():
 
                     # alle Smartmeter in richtige Struktur bringen
                     structure_corrected = False
-                    for dev in SMARTMETER_DEVICES:
-                        if dev not in state or not isinstance(state.get(dev), dict):
-                            print(f"{dev}: alte oder ungültige Struktur → wird neu initialisiert.")
-                            state[dev] = {
+                    for smartmeter_name in smartmeter_devices:
+                        if smartmeter_name not in state or not isinstance(state.get(smartmeter_name), dict):
+                            print(f"{smartmeter_name}: alte oder ungültige Struktur → wird neu initialisiert.")
+                            state[smartmeter_name] = {
                                 "power_last": 0,      # letzter gültiger Leistungswert
                                 "energy_berechnet": 0, # berechnete Energiesumme
                                 "energy_last2": 0,      # letzter echter Zählerstand
@@ -108,13 +108,13 @@ def load_state():
     # Datei fehlt oder defekt → komplett neuer State
     print("Erzeuge neuen State...")
     state = {
-        dev: {
+        smartmeter_name: {
             "power_last": 0,
             "energy_berechnet": 0,
             "energy_last2": 0,
             "stale_count": 0
         }
-        for dev in SMARTMETER_DEVICES
+        for smartmeter_name in smartmeter_devices
     }
     state["energy_last_total"] = energy_initial_total
     print(f"energy_last_total initial auf {energy_initial_total} gesetzt.")
@@ -134,17 +134,17 @@ def reset_counters(state):
 
     now = datetime.now()
     if now.hour == 0 and 5 <= now.minute <= 25:
-        for dev in SMARTMETER_DEVICES:
-            state[dev]["stale_count"] = 0
+        for smartmeter_name in smartmeter_devices:
+            state[smartmeter_name]["stale_count"] = 0
         print("Tagesreset: stale_count auf 0 gesetzt.")
 
 
-def try_direct_read(device_name, wait_seconds=20, attempt=1):
+def try_direct_read(smartmeter_name, wait_seconds=20, attempt=1):
     """Versucht einen Direktabruf vom GEN24 (bis zu zwei Versuche).
        Gibt (sm_energy, sm_power) zurück oder (None, None) bei Fehlschlag."""
 
     if wait_seconds > 0:
-        print(f"{device_name}: Warte {wait_seconds}s vor Direktabruf (Versuch {attempt})...")
+        print(f"{smartmeter_name}: Warte {wait_seconds}s vor Direktabruf (Versuch {attempt})...")
         time.sleep(wait_seconds)
 
     fresh = fetch_gen24_data()
@@ -152,23 +152,23 @@ def try_direct_read(device_name, wait_seconds=20, attempt=1):
 
     try:
         # robuster Zugriff: falls device nicht vorhanden -> KeyError -> except
-        channels = devices[device_name]["channels"]
+        channels = devices[smartmeter_name]["channels"]
 
         sm_energy_raw = channels.get("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64")
         sm_power_raw = channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0)
 
         # Wenn sm_energy_raw None -> Fehler provozieren und except auslösen
         if sm_energy_raw is None:
-            raise KeyError(f"{device_name}: fehlender Kanal SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64")
+            raise KeyError(f"{smartmeter_name}: fehlender Kanal SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64")
 
         sm_energy = int(sm_energy_raw)
         sm_power = int(sm_power_raw)
 
-        print(f"{device_name}: Direktabruf erfolgreich (Versuch {attempt})")
+        print(f"{smartmeter_name}: Direktabruf erfolgreich (Versuch {attempt})")
         return sm_energy, sm_power
 
     except Exception as e:
-        print(f"{device_name}: Direktabruf fehlgeschlagen (Versuch {attempt}) → {e}")
+        print(f"{smartmeter_name}: Direktabruf fehlgeschlagen (Versuch {attempt}) → {e}")
         return None, None
 
 
@@ -185,7 +185,7 @@ def get_API(data):
     # Geräte aus der übergebenen Struktur extrahieren (robust gegenüber unterschiedlichen Formen)
     devices = extract_devices_struct(data)
 
-    for device_name in SMARTMETER_DEVICES:
+    for device_name in smartmeter_devices:
         sm_state = state[device_name]
 
         # ----------- Zugriff auf übergebene Data-Struktur -----------
