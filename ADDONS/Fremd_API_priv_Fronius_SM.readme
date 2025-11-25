@@ -10,7 +10,7 @@ from datetime import datetime
 # Wird nur beim allerersten Start genutzt.
 # Hier Gesamtproduktionswert von allen abzurufenden Smartmetern einfügen.
 
-INITIAL_TOTAL_ENERGY = 12669083           # Beispielwert in Wh – bitte anpassen!
+INITIAL_TOTAL_ENERGY = 12673883           # Beispielwert in Wh – bitte anpassen!
 
 SMARTMETER_DEVICES = [                 # Smartmeter-Device-Namen (nur neue GEN24 Struktur ab FW 1.39.5-1)
     "Fronius_SmartMeter_2223836ab422",
@@ -124,7 +124,7 @@ def load_state():
 def save_state(state):
     try:
         with open(SAVE_FILE, "w") as f:
-            json.dump(state, f)
+            json.dump(state, f, indent=4)
     except Exception:
         print("Fehler beim Speichern!")
 
@@ -285,7 +285,8 @@ def get_API(data):
         total_sum = last_total
 
     elif total_sum > last_total + 1600:
-        print(f"⚠️ Gesamtenergie-Sprung moderat groß → begrenzt.")
+        diff = total_sum - last_total
+        print(f"⚠️ Gesamtenergie-Sprung moderat groß (+{diff} Wh, maximal erlaubt +32000 Wh) → begrenzt auf +1600 Wh.")
         total_sum = last_total + 1600
 
     state["TOTAL_SUM_ALT"] = total_sum
