@@ -8,7 +8,7 @@ from datetime import datetime
 # >>>>>>>>  Hier Änderungen vornehmen  >>>>>>>>>>>>>>>>>>>>>
 # Ganz unten stehen weitere Tipps bei Verbindungs- und Datenproblemen.
 
-INITIAL_energy_total = 12694835             # EINMALIGER Startwert (manuell setzen)
+energy_initial_total = 12694835             # EINMALIGER Startwert (manuell setzen)
 #                                           Gesamtproduktionswert aller Smartmeter in Wh
 #                                           wird als letzte Sicherheit genutzt und nicht aktualisiert
 
@@ -80,9 +80,9 @@ def load_state():
 
                     # Datei vorhanden & lesbar → energy_total_ALT korrekt initialisieren
                     alt = state.get("energy_total_ALT", 0)
-                    if alt < INITIAL_energy_total:
-                        print(f"energy_total_ALT aktualisiert auf Initialwert {INITIAL_energy_total}")
-                        state["energy_total_ALT"] = INITIAL_energy_total
+                    if alt < energy_initial_total:
+                        print(f"energy_total_ALT aktualisiert auf Initialwert {energy_initial_total}")
+                        state["energy_total_ALT"] = energy_initial_total
 
                     # alle Smartmeter in richtige Struktur bringen
                     changed = False
@@ -116,8 +116,8 @@ def load_state():
         }
         for dev in SMARTMETER_DEVICES
     }
-    state["energy_total_ALT"] = INITIAL_energy__total
-    print(f"energy_total_ALT initial auf {INITIAL_energy_total} gesetzt.")
+    state["energy_total_ALT"] = energy_initial__total
+    print(f"energy_total_ALT initial auf {energy_initial_total} gesetzt.")
     return state
 
 
@@ -303,9 +303,9 @@ def get_API(data):
 
     # ---------------------- Ausgabe ----------------------
 
-    if INITIAL_energy_total > energy_total:
-        energy_total=INITIAL_energy_total
-        print(f"⚠️ Datenfehler: AC_Produktion aktualisiert auf Initialwert {INITIAL_energy_total}")
+    if energy_initial_total > energy_total:
+        energy_total=energy_initial_total
+        print(f"⚠️ Datenfehler: AC_Produktion aktualisiert auf Initialwert {energy_initial_total}")
         print(f"⚠️ Bitte Summenpruefung in den Einstellungen aktivieren")
         print(f"Eine kleine Hilfe ist am Ende des Fremd_API Skriptes")
 
