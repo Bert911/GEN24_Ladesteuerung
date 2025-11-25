@@ -43,7 +43,7 @@ def fetch_gen24_data():
         print(f"Fehler beim Abrufen der GEN24-Daten: {e}")
         return {}
 
-def extract_devices_struct(raw): # Extrahiert die Smartmeter-Daten aus der API-Antwort
+def extract_devices_struct(raw):             # Extrahiert die Smartmeter-Daten aus der API-Antwort
     if isinstance(raw, dict):
         if "Body" in raw and isinstance(raw["Body"], dict) and "Data" in raw["Body"]:
             return raw["Body"]["Data"]
