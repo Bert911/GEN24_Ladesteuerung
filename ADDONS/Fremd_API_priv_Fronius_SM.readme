@@ -126,7 +126,7 @@ def reset_counters(smartmeter_state):
         print("Tagesreset: stale_count auf 0 gesetzt.")
 
 
-def try_direct_read(smartmeter_name, wait_seconds=20, attempt=1):
+def try_direct_read(smartmeter_name, wait_seconds=30, attempt=1):
     """Versucht einen Direktabruf vom GEN24 (bis zu zwei Versuche).
        Gibt (sm_energy, sm_power) zurück oder (None, None) bei Fehlschlag."""
 
@@ -214,9 +214,9 @@ def get_API(data_temp):
 
         # Wenn Summe fehlt → Direktabruf GEN24 (max. 2 Versuche)
         if sm_energy is None:
-            sm_energy, sm_power = try_direct_read(smartmeter_name, wait_seconds=20, attempt=1)
+            sm_energy, sm_power = try_direct_read(smartmeter_name, wait_seconds=30, attempt=1)
         if sm_energy is None:
-            sm_energy, sm_power = try_direct_read(smartmeter_name, wait_seconds=20, attempt=2)
+            sm_energy, sm_power = try_direct_read(smartmeter_name, wait_seconds=30, attempt=2)
 
         # Wenn immer noch kein Wert → Fallback auf gespeicherten State
         if sm_energy is None:
