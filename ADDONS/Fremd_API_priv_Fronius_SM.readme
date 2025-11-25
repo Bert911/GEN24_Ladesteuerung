@@ -78,7 +78,7 @@ def load_state():
                             print(f"{smartmeter_name}: alte oder ungültige Struktur → wird neu initialisiert.")
                             state[smartmeter_name] = {
                                 "power_last": 0,      # letzter gültiger Leistungswert
-                                "energy_berechnet": 0, # berechnete Energiesumme
+                                "energy_calc": 0, # berechnete Energiesumme
                                 "energy_last2": 0,      # letzter echter Zählerstand
                                 "stale_count": 0    # unverändert-Zähler
                             }
@@ -97,7 +97,7 @@ def load_state():
     state = {
         smartmeter_name: {
             "power_last": 0,
-            "energy_berechnet": 0,
+            "energy_calc": 0,
             "energy_last2": 0,
             "stale_count": 0
         }
@@ -218,9 +218,9 @@ def get_API(data_temp):
             sm_power = sm_state.get("power_last", 0)
 
         # ---------- Erste Initialisierung ----------
-        if sm_state["energy_berechnet"] == 0 and sm_state["energy_last2"] == 0:
+        if sm_state["energy_calc"] == 0 and sm_state["energy_last2"] == 0:
             print(f"{smartmeter_name}: Erste Initialisierung → {sm_energy}")
-            sm_state["energy_berechnet"] = sm_energy
+            sm_state["energy_calc"] = sm_energy
             sm_state["energy_last2"] = sm_energy
 
         # ---------- Stale Detection ----------
@@ -228,8 +228,8 @@ def get_API(data_temp):
             sm_state["stale_count"] += 1
             print(f"{smartmeter_name}: unverändert, Zähler = {sm_state['stale_count']}")
             # sm_power kann 0 sein; Division int ok
-            sm_energy = int(sm_state["energy_berechnet"] + (sm_power or 0) / 8)
-            sm_state["energy_berechnet"] = sm_energy
+            sm_energy = int(sm_state["energy_calc"] + (sm_power or 0) / 8)
+            sm_state["energy_calc"] = sm_energy
 
         # ---------- Prüfung Power ----------
         if sm_power is not None and 0 <= sm_power < Leistung_WR:
@@ -240,8 +240,8 @@ def get_API(data_temp):
 
         # ---------- Prüfung Summe----------
         if Summenpruefung_aktiv:
-            min_val = min(sm_state["energy_berechnet"], sm_state["energy_last2"])
-            max_val = max(sm_state["energy_berechnet"], sm_state["energy_last2"])
+            min_val = min(sm_state["energy_calc"], sm_state["energy_last2"])
+            max_val = max(sm_state["energy_calc"], sm_state["energy_last2"])
 
             if min_val <= sm_energy <= (max_val + Leistung_WR * 2):
                 sm_state["energy_last2"] = sm_energy
@@ -253,8 +253,8 @@ def get_API(data_temp):
                 print(f"{smartmeter_name}: Fehler Summenwert ({old}) → Fallback {sm_energy}")
 
         # ---------- energy_berechnet aktualisieren ----------
-        if sm_energy > sm_state["energy_berechnet"]:
-            sm_state["energy_berechnet"] = sm_energy
+        if sm_energy > sm_state["energy_calc"]:
+            sm_state["energy_calc"] = sm_energy
 
         power_total += sm_power
         energy_total += sm_energy
