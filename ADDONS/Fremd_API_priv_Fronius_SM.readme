@@ -126,16 +126,14 @@ def reset_counters(smartmeter_state):
         print("Tagesreset: stale_count auf 0 gesetzt.")
 
 
-def try_direct_read(smartmeter_name, wait_seconds=30, attempt=1):
-    """Versucht einen Direktabruf vom GEN24 (bis zu zwei Versuche).
-       Gibt (sm_energy, sm_power) zurück oder (None, None) bei Fehlschlag."""
+def try_direct_read(smartmeter_name, data=None, wait_seconds=30, attempt=1):
+    """Direktabruf vom GEN24, nutzt übergebene Daten, kein wiederholtes fetch"""
     
     if wait_seconds > 0:
         print(f"{smartmeter_name}: Warte {wait_seconds}s vor Direktabruf (Versuch {attempt})...")
         time.sleep(wait_seconds)
 
-    data = fetch_gen24_data() or {}
-    sm_map = extract_devices_struct(data) or {}
+    sm_map = extract_devices_struct(data or {}) or {}
     ch = sm_map.get(smartmeter_name, {}).get("channels", {})
 
     sm_energy_raw = ch.get("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64")
@@ -153,7 +151,6 @@ def try_direct_read(smartmeter_name, wait_seconds=30, attempt=1):
     except Exception as e:
         print(f"{smartmeter_name}: Direktabruf fehlgeschlagen (Versuch {attempt}) → {e}")
         return None, None
-
 
 # ------------------------- Hauptfunktion -------------------------
 
@@ -187,20 +184,11 @@ def get_API(data_temp):
         sm_energy = None
 
         # ---------- Daten lesen ----------
-        try:
-            sm_power_raw = ch.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", None)
-            if sm_power_raw is not None:
-                sm_power = int(sm_power_raw)
-        except Exception:
-            sm_power = None
+        ch = smartmeter_map.get(smartmeter_name, {}).get("channels", {})
 
-        try:
-            # Energie — exakter Key erwartet; wenn fehlt -> None
-            sm_energy_raw = ch.get("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64", None)
-            if sm_energy_raw is not None:
-                sm_energy = int(sm_energy_raw)
-        except Exception:
-            sm_energy = None
+        # sichere Umwandlung in int, None → 0
+        sm_power = int(ch.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0) or 0)
+        sm_energy = int(ch.get("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64", 0) or 0)
 
         # Wenn Summe fehlt → Direktabruf GEN24 (max. 2 Versuche)
         if sm_energy is None:
