@@ -5,24 +5,27 @@ import time
 from datetime import datetime
 
 
-# >>>>>>>>  Hier Änderungen vornehmen  >>>>>>>>>>>>>>>>>>>>> ganz unten sind weitere Tipps bei Problemen
+# >>>>>>>>  Hier Änderungen vornehmen  >>>>>>>>>>>>>>>>>>>>>
+# Ganz unten stehen weitere Tipps bei Verbindungs- und Datenproblemen.
 
-INITIAL_TOTAL_ENERGY = 12693598             # EINMALIGER INITIAL-WERT (muss manuell gesetzt werden)Beispielwert in Wh
-#                                           Gesamtproduktionswert von allen abzurufenden Smartmetern einfügen
+INITIAL_TOTAL_ENERGY = 12693598             # EINMALIGER Startwert (manuell setzen)
+#                                           Gesamtproduktionswert aller Smartmeter in Wh
+#                                           wird als letzte Sicherheit genutzt und nicht aktualisiert
 
-SMARTMETER_DEVICES = [                      # Smartmeter-Device-Namen (nur neue GEN24 Struktur ab FW 1.39.5-1)
-    "Fronius_SmartMeter_2223836ab422",
+
+SMARTMETER_DEVICES = [                      # Smartmeter-Device-Namen (neue GEN24-Struktur ab Firmware 1.39.5-1)
+    "Fronius_SmartMeter_2223836ab422",      # inkompatibel mit vorheriger Firmware
     "Fronius_SmartMeter_4d68ed529a2d"
 ]
 
-GEN24_IP = "192.168.178.42"                # Gen24 IP Adresse
-Summenpruefung_aktiv = 1                   # 1 = an, 0 = aus; Prüfung mit Initialwert am Ende bitte manuel entfernen.
-Leistung_WR = 7500                         # Leistung des größten WR/Smartmeter in der Anlage
-Max_Energiesprung = Leistung_WR / 5        # pro Abruf
-Max_Energiesprung_Tag = Leistung_WR * 8    # Tages-Sicherheit (optional)
+GEN24_IP = "192.168.178.42"                # IP-Adresse des GEN24
+Summenpruefung_aktiv = 1                   # 1 = aktiv, 0 = deakt. (Prüfung mit Startwert bleibt immer erhalten)
+Leistung_WR = 7500                         # Leistung des größten Wechselrichters / Smartmeters
+Max_Energiesprung = Leistung_WR / 5        # maximal zulässiger Energiesprung pro Abruf (0 zum deakt.)
+Max_Energiesprung_Tag = Leistung_WR * 8    # tägliche Sicherheitsgrenze (0 zum deakt.)
 
 
-# >>>>>>>>  Unterhalb nach Bedarf ändern  >>>>>>>>>>>>>>>>>>>>>
+# >>>>>>>>  Unterhalb nur bei Bedarf ändern  >>>>>>>>>>>>>>>>>>>>>
 
 
 SAVE_FILE = os.path.join(os.path.dirname(__file__), "FremdAPI_last.json")
@@ -63,8 +66,9 @@ def extract_devices_struct(data):
 
 
 def load_state():
-    """State laden. Bei Fehler/leer/alt → neu anlegen. TOTAL_SUM_ALT wird robust initialisiert."""
-    # Datei prüfen
+    """State aus Datei laden. Bei Fehlern, leeren Dateien oder veralteter Struktur wird ein neuer State erzeugt.
+       TOTAL_SUM_ALT wird automatisch auf einen sicheren Startwert gesetzt."""
+
     if os.path.exists(SAVE_FILE):
         try:
             with open(SAVE_FILE, "r") as f:
@@ -126,7 +130,8 @@ def save_state(state):
 
 
 def reset_counters(state):
-    """Setzt die stale_count Counter täglich zwischen 00:05 und 00:25 zurück."""
+    """Setzt die stale_count-Zähler täglich zwischen 00:05 und 00:25 zurück."""
+
     now = datetime.now()
     if now.hour == 0 and 5 <= now.minute <= 25:
         for dev in SMARTMETER_DEVICES:
@@ -135,7 +140,9 @@ def reset_counters(state):
 
 
 def try_direct_read(device_name, wait_seconds=60, attempt=1):
-    """Direktabruf vom GEN24. Gibt (sm_sum, sm_mean) oder (None, None) zurück."""
+    """Versucht einen Direktabruf vom GEN24 (bis zu zwei Versuche).
+       Gibt (sm_sum, sm_mean) zurück oder (None, None) bei Fehlschlag."""
+
     if wait_seconds > 0:
         print(f"{device_name}: Warte {wait_seconds}s vor Direktabruf (Versuch {attempt})...")
         time.sleep(wait_seconds)
@@ -265,7 +272,7 @@ def get_API(data):
         total_mean += sm_mean
         total_sum += sm_sum
 
-    # ---------------------- Gesamt-Sicherheitslogik ----------------------
+# ---------------------- Gesamt-Sicherheitslogik ----------------------
 
     last_total = state.get("TOTAL_SUM_ALT", 0)
 
@@ -307,31 +314,39 @@ def get_API(data):
     print("GesamtEnergieSM:", Fremd_API["AC_Produktion"], "\n")
 
     return Fremd_API
-#*
-Empfehlung für Verbindungsfehler:
-Die Standardeinstellung der OptenDTU sollte sein, dass dieser nur sendet,
+"""
+Empfehlungen bei Verbindungsproblemen:
+
+Die Standard-Einstellung der OpenDTU sollte sein, dass diese nur sendet,
 wenn alle Wechselrichter der DTU eine aktive Verbindung haben.
-Sollte ein Wechselrichter nicht erreichbar sein, werden von der DTU keine neuen Daten an den Fronius übergeben.
-Dadurch können positive Datensprünge entstehen.
-Bei mir kam es ebenfalls vor, dass beim Neustart der DTU auch zu wenig Energie an Fronius übermittelt wurde, was es nicht besser macht.
+--> unter Netzwerkeinstellungen->Modbus-Einstellungen:
+Modbus TCP Server aktivieren:     aktiv (blau)
+Modbus TCP Serverstart verzögern: aktiv (blau)
 
-Im zweifelsfall deaktivere ich den GEN24 (ausschalten oder vom Netzwerk trennen), dadurch bekommt er keine Daten mehr von der DTU.
-Wenn die DTU und aller WR dann wieder aktiv sind, darf der GEN24 wieder online gehen.
+Falls ein Wechselrichter nicht erreichbar ist, liefert die DTU keine neuen Daten an den Fronius.
+Dadurch können positive Energiesprünge entstehen, welche mittels "Max_Energiesprung" begrenzt werden
 
-Die Einstellung der Sendeleistung der DTU hat bei mir nur relativ wenig gebracht.
-Da war die Position der DTU sowie die ausrichtung der Antenne viel entscheidender.
+Bei mir kam es ebenfalls vor, dass die DTU beim Neustart zu wenig bisher produzierte Energie
+an den Fronius übertragen hat, was in der Historie für Chaos gesorgt hatte.
 
-Bei mehr wie 3 Wechselrichter an einer DTU empfehler ich eine 2. DTU,
-die kosten halten sich ja in Grenzen und die Sprünge bei Datenverlust werden gleichzeitig halbiert.
+Im Zweifelsfall schalte ich den GEN24 kurz ab (oder trenne ihn vom Netzwerk).
+Solange der GEN24 offline ist, erhält er keine (fehlerhaften) Daten der DTU.
+Wenn die DTU und alle Wechselrichter wieder stabil laufen, kann der GEN24 wieder online gehen.
 
-Die vielen Sicherheitsmechanismen kommen von er alten GEN24 Firmware (1.38),
-wo der GEN24 einfach manchmal noch ein zusätzliches Smartmeter erfunden hatte.
-Manchmal hat er bei mir auch die beiden ID vertauscht oder die Daten eines Smartmeter bei beiden IDs ausgegeben.
-Damit ich dann wenigstens eine vernünftige Historie habe, wurden die ganzen Sicherheitsmechanismen eingeführt.
+Die Sendeleistung der DTU zu verändern brachte bei mir nur geringfügige Verbesserungen.
+Viel entscheidender waren die Positionierung der DTU und die Ausrichtung der Antenne.
 
-Vielen Dank geht insbesonders an Wiggal
+Bei mehr als drei Wechselrichtern an einer DTU empfehle ich eine zweite DTU.
+Die Kosten sind überschaubar und die Auswirkungen von Datenverlusten halbieren sich.
+
+Die vielen Sicherheitsmechanismen stammen aus der alten GEN24-Firmware (1.38),
+bei der der GEN24 teilweise zusätzliche Smartmeter „erfunden“ hat.
+Manchmal hat er sogar die beiden IDs vertauscht oder die Werte eines Smartmeters unter beiden IDs ausgegeben.
+Damit daraus dennoch eine korrekte Historie entsteht, wurden alle diese Schutzmechanismen eingeführt.
+
+Vielen Dank insbesondere an Wiggal:
 https://github.com/wiggal/
-*#
+"""
 
 
 
