@@ -51,7 +51,7 @@ def extract_devices_struct(data):
         data["Body"]["Data"]
         data["Data"]
         direkt data (falls schon vorverarbeitet)
-    Gibt die devices-Map (device_name -> {attributes, channels, ...}) zurück.
+    Gibt die devices (device_name -> {attributes, channels, ...}) zurück.
     """
     if isinstance(data, dict):
         # Fall: komplette API-Antwort mit Body->Data
@@ -182,7 +182,7 @@ def get_API(data):
     power_total = 0
     energy_total = 0
 
-    # Geräte-Map aus der übergebenen Struktur extrahieren (robust gegenüber unterschiedlichen Formen)
+    # Geräte aus der übergebenen Struktur extrahieren (robust gegenüber unterschiedlichen Formen)
     devices = extract_devices_struct(data)
 
     for device_name in SMARTMETER_DEVICES:
