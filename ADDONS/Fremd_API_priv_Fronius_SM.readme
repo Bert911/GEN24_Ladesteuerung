@@ -139,7 +139,7 @@ def reset_counters(state):
         print("Tagesreset: stale_count auf 0 gesetzt.")
 
 
-def try_direct_read(device_name, wait_seconds=60, attempt=1):
+def try_direct_read(device_name, wait_seconds=20, attempt=1):
     """Versucht einen Direktabruf vom GEN24 (bis zu zwei Versuche).
        Gibt (sm_energy, sm_power) zurück oder (None, None) bei Fehlschlag."""
 
