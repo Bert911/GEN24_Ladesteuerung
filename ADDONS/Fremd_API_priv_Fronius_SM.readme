@@ -190,8 +190,8 @@ def get_API(data):
 
         # ----------- Zugriff auf übergebene Data-Struktur -----------
         try:
-            sm_data = smartmeter_map.get(smartmeter_name, {})
-            channels = sm_data.get("channels", {}) if isinstance(sm_data, dict) else {}
+            smartmeter_datastructure = smartmeter_map.get(smartmeter_name, {})
+            channels = smartmeter_datastructure.get("channels", {}) if isinstance(smartmeter_datastructure, dict) else {}
         except Exception as e:
             print(f"{smartmeter_name}: Strukturfehler in externer Data → {e}")
             channels = {}
