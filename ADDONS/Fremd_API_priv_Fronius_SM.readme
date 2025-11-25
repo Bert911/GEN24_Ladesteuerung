@@ -44,6 +44,22 @@ def fetch_gen24_data():
         print(f"Fehler beim Abrufen der GEN24-Daten: {e}")
         return {}
 
+def extract_devices_struct(data):
+    """
+    Datenstruktur aus externem Script prüfen.
+    Zulässig:
+        data["Body"]["Data"]
+        data["Data"]
+        direkt data (falls schon vorverarbeitet)
+    """
+    if isinstance(data, dict):
+        if "Body" in data and "Data" in data["Body"]:
+            return data["Body"]["Data"]
+        if "Data" in data:
+            return data["Data"]
+        return data
+
+    return {}
 
 def load_state():
     """State laden. Bei Fehler/leer/alt → neu anlegen. TOTAL_SUM_ALT wird robust initialisiert."""
@@ -148,24 +164,46 @@ def get_API(data):
     total_mean = 0
     total_sum = 0
 
-    for device_name in SMARTMETER_DEVICES:
+ for sm_id in SMARTMETER_IDS:
+        sm_state = state[sm_id]
+        device_name = SMARTMETER_MAP[sm_id]
 
-        sm_state = state[device_name]
+        # ----------- Zugriff auf übergebene Data-Struktur -----------
+        try:
+            sm_data = devices[device_name]
+            channels = sm_data["channels"]
+        except Exception as e:
+            print(f"SM {sm_id}: Strukturfehler in externer Data → {e}")
+            channels = {}
+        # -------------------------------------------------------------
+
+        # Werte einlesen
+        sm_mean = None
+        sm_sum = None
 
         # ---------- Daten lesen ----------
         try:
             channels = data[device_name]["channels"]
             sm_mean = int(channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0))
+        except:
+            sm_mean = None
+
+        try:
             sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
-        except Exception as e:
-            print(f"{device_name}: Strukturfehler → {e}")
-            sm_sum, sm_mean = try_direct_read(device_name, wait_seconds=20, attempt=1)
-            if sm_sum is None:
-                sm_sum, sm_mean = try_direct_read(device_name, wait_seconds=20, attempt=2)
-            if sm_sum is None:
-                print(f"{device_name}: Fallback genutzt – alte Werte.")
-                sm_sum = sm_state["SUM_alt2"]
-                sm_mean = sm_state["MEAN_alt"]
+ except:
+            sm_sum = None
+
+        # Wenn Summe fehlt → Direktabruf GEN24
+        if sm_sum is None:
+            sm_sum, sm_mean = try_direct_read(sm_id, attempt=1)
+        if sm_sum is None:
+            sm_sum, sm_mean = try_direct_read(sm_id, attempt=2)
+
+        # Wenn immer noch kein Wert → Fallback
+        if sm_sum is None:
+            print(f"SM {sm_id}: Fallback → alte Werte genutzt.")
+            sm_sum = sm_state["SUM_alt2"]
+            sm_mean = sm_state["MEAN_alt"]
 
         # ---------- Erste Initialisierung ----------
         if sm_state["SUM_berechnet"] == 0 and sm_state["SUM_alt2"] == 0:
