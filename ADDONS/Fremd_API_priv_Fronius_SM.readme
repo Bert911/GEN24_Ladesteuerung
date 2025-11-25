@@ -63,20 +63,20 @@ def load_state():
                 if content == "":
                     print("WARNUNG: FremdAPI_last.json ist leer → neue Struktur wird erzeugt.")
                 else:
-                    state = json.loads(content)
+                    smartmeter_state = json.loads(content)
 
                     # Datei vorhanden & lesbar → energy_last_total korrekt initialisieren
-                    if state.get("energy_last_total", 0) < energy_initial_total:
+                    if smartmeter_state.get("energy_last_total", 0) < energy_initial_total:
 
                         print(f"energy_last_total aktualisiert auf Initialwert {energy_initial_total}")
-                        state["energy_last_total"] = energy_initial_total
+                        smartmeter_state["energy_last_total"] = energy_initial_total
 
                     # alle Smartmeter in richtige Struktur bringen
                     structure_corrected = False
                     for smartmeter_name in smartmeter_devices:
-                        if smartmeter_name not in state or not isinstance(state.get(smartmeter_name), dict):
+                        if smartmeter_name not in smartmeter_state or not isinstance(smartmeter_state.get(smartmeter_name), dict):
                             print(f"{smartmeter_name}: alte oder ungültige Struktur → wird neu initialisiert.")
-                            state[smartmeter_name] = {
+                            smartmeter_state[smartmeter_name] = {
                                 "power_last": 0,      # letzter gültiger Leistungswert
                                 "energy_calc": 0, # berechnete Energiesumme
                                 "energy_last2": 0,      # letzter echter Zählerstand
@@ -87,14 +87,14 @@ def load_state():
                     if structure_corrected:
                         print("Strukturfehler korrigiert – State wurde überarbeitet.")
 
-                    return state
+                    return smartmeter_state
 
         except Exception as e:
             print(f"WARNUNG: JSON defekt ({e}) → neue Struktur wird erzeugt.")
 
     # Datei fehlt oder defekt → komplett neuer State
     print("Erzeuge neuen State...")
-    state = {
+    smartmeter_state = {
         smartmeter_name: {
             "power_last": 0,
             "energy_calc": 0,
@@ -103,26 +103,26 @@ def load_state():
         }
         for smartmeter_name in smartmeter_devices
     }
-    state["energy_last_total"] = energy_initial_total
+    smartmeter_state["energy_last_total"] = energy_initial_total
     print(f"energy_last_total initial auf {energy_initial_total} gesetzt.")
-    return state
+    return smartmeter_state
 
 
-def save_state(state):
+def save_state(smartmeter_state):
     try:
         with open(SAVE_FILE, "w") as f:
-            json.dump(state, f, indent=4)
+            json.dump(smartmeter_state, f, indent=4)
     except Exception:
         print("Fehler beim Speichern!")
 
 
-def reset_counters(state):
+def reset_counters(smartmeter_state):
     """Setzt die stale_count-Zähler täglich zwischen 00:05 und 00:25 zurück."""
 
     now = datetime.now()
     if now.hour == 0 and 5 <= now.minute <= 25:
         for smartmeter_name in smartmeter_devices:
-            state[smartmeter_name]["stale_count"] = 0
+            smartmeter_state[smartmeter_name]["stale_count"] = 0
         print("Tagesreset: stale_count auf 0 gesetzt.")
 
 
@@ -162,8 +162,8 @@ def try_direct_read(smartmeter_name, wait_seconds=20, attempt=1):
 # ------------------------- Hauptfunktion -------------------------
 
 def get_API(data_temp):
-    state = load_state()
-    reset_counters(state)
+    smartmeter_state = load_state()
+    reset_counters(smartmeter_state)
     now = datetime.now()
 
     power_total = 0
@@ -173,7 +173,7 @@ def get_API(data_temp):
     smartmeter_map = extract_devices_struct(data_temp)
 
     for smartmeter_name in smartmeter_devices:
-        sm_state = state[smartmeter_name]
+        sm_state = smartmeter_state[smartmeter_name]
 
         # ----------- Zugriff auf übergebene Data-Struktur -----------
         try:
@@ -261,7 +261,7 @@ def get_API(data_temp):
 
 # ---------------------- Gesamt-Sicherheitslogik ----------------------
 
-    energy_last_total = state.get("energy_last_total", 0)
+    energy_last_total = smartmeter_state.get("energy_last_total", 0)
     if Summenpruefung_aktiv:
         if energy_last_total == 0:
             print(f"Erster Start → energy_last_total = {energy_total}")
@@ -285,8 +285,8 @@ def get_API(data_temp):
             )
             energy_total = energy_last_total + 1600
 
-    state["energy_last_total"] = energy_total
-    save_state(state)
+    smartmeter_state["energy_last_total"] = energy_total
+    save_state(smartmeter_state)
 
     # ---------------------- Ausgabe ----------------------
 
