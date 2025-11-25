@@ -44,6 +44,7 @@ def fetch_gen24_data():
         print(f"Fehler beim Abrufen der GEN24-Daten: {e}")
         return {}
 
+
 def extract_devices_struct(data):
     """
     Datenstruktur aus externem Script prüfen.
@@ -51,15 +52,19 @@ def extract_devices_struct(data):
         data["Body"]["Data"]
         data["Data"]
         direkt data (falls schon vorverarbeitet)
+    Gibt die devices-Map (device_name -> {attributes, channels, ...}) zurück.
     """
     if isinstance(data, dict):
-        if "Body" in data and "Data" in data["Body"]:
+        # Fall: komplette API-Antwort mit Body->Data
+        if "Body" in data and isinstance(data["Body"], dict) and "Data" in data["Body"]:
             return data["Body"]["Data"]
-        if "Data" in data:
+        # Fall: direktes Data-Feld
+        if "Data" in data and isinstance(data["Data"], dict):
             return data["Data"]
+        # Wenn dict, aber schon devices
         return data
-
     return {}
+
 
 def load_state():
     """State laden. Bei Fehler/leer/alt → neu anlegen. TOTAL_SUM_ALT wird robust initialisiert."""
@@ -134,17 +139,27 @@ def reset_counters(state):
 
 
 def try_direct_read(device_name, wait_seconds=60, attempt=1):
-    """Direktabruf vom GEN24."""
+    """Direktabruf vom GEN24. Gibt (sm_sum, sm_mean) oder (None, None) zurück."""
     if wait_seconds > 0:
         print(f"{device_name}: Warte {wait_seconds}s vor Direktabruf (Versuch {attempt})...")
         time.sleep(wait_seconds)
 
     fresh = fetch_gen24_data()
-    try:
-        channels = fresh[device_name]["channels"]
+    devices = extract_devices_struct(fresh)
 
-        sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
-        sm_mean = int(channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0))
+    try:
+        # robuster Zugriff: falls device nicht vorhanden -> KeyError -> except
+        channels = devices[device_name]["channels"]
+
+        sm_sum_raw = channels.get("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64")
+        sm_mean_raw = channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0)
+
+        # Wenn sm_sum_raw None -> Fehler provozieren und except auslösen
+        if sm_sum_raw is None:
+            raise KeyError(f"{device_name}: fehlender Kanal SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64")
+
+        sm_sum = int(sm_sum_raw)
+        sm_mean = int(sm_mean_raw)
 
         print(f"{device_name}: Direktabruf erfolgreich (Versuch {attempt})")
         return sm_sum, sm_mean
@@ -164,16 +179,18 @@ def get_API(data):
     total_mean = 0
     total_sum = 0
 
- for sm_id in SMARTMETER_IDS:
-        sm_state = state[sm_id]
-        device_name = SMARTMETER_MAP[sm_id]
+    # Geräte-Map aus der übergebenen Struktur extrahieren (robust gegenüber unterschiedlichen Formen)
+    devices = extract_devices_struct(data)
+
+    for device_name in SMARTMETER_DEVICES:
+        sm_state = state[device_name]
 
         # ----------- Zugriff auf übergebene Data-Struktur -----------
         try:
-            sm_data = devices[device_name]
-            channels = sm_data["channels"]
+            sm_data = devices.get(device_name, {})
+            channels = sm_data.get("channels", {}) if isinstance(sm_data, dict) else {}
         except Exception as e:
-            print(f"SM {sm_id}: Strukturfehler in externer Data → {e}")
+            print(f"{device_name}: Strukturfehler in externer Data → {e}")
             channels = {}
         # -------------------------------------------------------------
 
@@ -183,27 +200,32 @@ def get_API(data):
 
         # ---------- Daten lesen ----------
         try:
-            channels = data[device_name]["channels"]
-            sm_mean = int(channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0))
-        except:
+            # Leistung (Mean) — falls nicht vorhanden, bleibt None
+            sm_mean_raw = channels.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", None)
+            if sm_mean_raw is not None:
+                sm_mean = int(sm_mean_raw)
+        except Exception:
             sm_mean = None
 
         try:
-            sm_sum = int(channels["SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64"])
- except:
+            # Energie (Sum) — exakter Key erwartet; wenn fehlt -> None
+            sm_sum_raw = channels.get("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64", None)
+            if sm_sum_raw is not None:
+                sm_sum = int(sm_sum_raw)
+        except Exception:
             sm_sum = None
 
-        # Wenn Summe fehlt → Direktabruf GEN24
+        # Wenn Summe fehlt → Direktabruf GEN24 (max. 2 Versuche)
         if sm_sum is None:
-            sm_sum, sm_mean = try_direct_read(sm_id, attempt=1)
+            sm_sum, sm_mean = try_direct_read(device_name, wait_seconds=20, attempt=1)
         if sm_sum is None:
-            sm_sum, sm_mean = try_direct_read(sm_id, attempt=2)
+            sm_sum, sm_mean = try_direct_read(device_name, wait_seconds=20, attempt=2)
 
-        # Wenn immer noch kein Wert → Fallback
+        # Wenn immer noch kein Wert → Fallback auf gespeicherten State
         if sm_sum is None:
-            print(f"SM {sm_id}: Fallback → alte Werte genutzt.")
-            sm_sum = sm_state["SUM_alt2"]
-            sm_mean = sm_state["MEAN_alt"]
+            print(f"{device_name}: Fallback genutzt – alte Werte.")
+            sm_sum = sm_state.get("SUM_alt2", 0)
+            sm_mean = sm_state.get("MEAN_alt", 0)
 
         # ---------- Erste Initialisierung ----------
         if sm_state["SUM_berechnet"] == 0 and sm_state["SUM_alt2"] == 0:
@@ -215,11 +237,12 @@ def get_API(data):
         if sm_sum == sm_state["SUM_alt2"] and 8 <= now.hour < 18:
             sm_state["stale_count"] += 1
             print(f"{device_name}: unverändert, Zähler = {sm_state['stale_count']}")
-            sm_sum = int(sm_state["SUM_berechnet"] + sm_mean / 8)
+            # sm_mean kann 0 sein; Division int ok
+            sm_sum = int(sm_state["SUM_berechnet"] + (sm_mean or 0) / 8)
             sm_state["SUM_berechnet"] = sm_sum
 
         # ---------- MEAN Prüfung ----------
-        if 0 <= sm_mean < Leistung_WR:
+        if sm_mean is not None and 0 <= sm_mean < Leistung_WR:
             sm_state["MEAN_alt"] = sm_mean
         else:
             print(f"{device_name}: Fehler Produktionswert ({sm_mean}), nutze alten Wert.")
@@ -227,16 +250,13 @@ def get_API(data):
 
         # ---------- Summenprüfung ----------
         if Summenpruefung_aktiv:
-
             min_val = min(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
             max_val = max(sm_state["SUM_berechnet"], sm_state["SUM_alt2"])
 
             if min_val <= sm_sum <= (max_val + Leistung_WR * 2):
                 sm_state["SUM_alt2"] = sm_sum
-
             elif (min_val - 800) <= sm_sum:
                 sm_sum = int(max_val)
-
             else:
                 old = sm_sum
                 sm_sum = int(max_val + sm_state["MEAN_alt"] / 8)
