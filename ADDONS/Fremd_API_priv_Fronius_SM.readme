@@ -174,7 +174,7 @@ def try_direct_read(smartmeter_name, wait_seconds=20, attempt=1):
 
 # ------------------------- Hauptfunktion -------------------------
 
-def get_API(data):
+def get_API(data_temp):
     state = load_state()
     reset_counters(state)
     now = datetime.now()
@@ -183,7 +183,7 @@ def get_API(data):
     energy_total = 0
 
     # Geräte aus der übergebenen Struktur extrahieren (robust gegenüber unterschiedlichen Formen)
-    smartmeter_map = extract_devices_struct(data)
+    smartmeter_map = extract_devices_struct(data_temp)
 
     for smartmeter_name in smartmeter_devices:
         sm_state = state[smartmeter_name]
