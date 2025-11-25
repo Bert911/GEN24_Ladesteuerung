@@ -172,9 +172,17 @@ def get_API(data_temp):
     smartmeter_map = extract_devices_struct(data_temp)
 
     for smartmeter_name in smartmeter_devices:
-        sm_state = smartmeter_state[smartmeter_name]
+        # Robuster Zugriff auf den State – KeyError vermeiden
+        sm_state = smartmeter_state.get(smartmeter_name, {})
 
-        # ----------- Zugriff auf übergebene Data-Struktur -----------
+        # Sicherstellen, dass alle erwarteten Keys existieren
+        sm_state.setdefault("power_last", 0)
+        sm_state.setdefault("energy_calc", 0)
+        sm_state.setdefault("energy_last2", 0)
+        sm_state.setdefault("stale_count", 0)
+        smartmeter_state[smartmeter_name] = sm_state  # falls neu angelegt
+
+        # ----------- Zugriff auf übergebene Data-Struktur ----------- 
         try:
             smartmeter_datastructure = smartmeter_map.get(smartmeter_name, {})
             channels = smartmeter_datastructure.get("channels", {}) if isinstance(smartmeter_datastructure, dict) else {}
