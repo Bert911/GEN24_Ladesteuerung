@@ -284,13 +284,19 @@ def get_API(data):
             print(f"⚠️ Gesamtenergie rückläufig ({total_sum} < {last_total}) → nutze alten Wert.")
             total_sum = last_total
 
-        elif total_sum > last_total + 32000:
-            print(f"⚠️ Gesamtenergie-Sprung zu groß (+{total_sum - last_total}) → verworfen.")
+        # ----------- Tagesgrenze (Max_Energiesprung_Tag) -----------
+        elif Max_Energiesprung_Tag > 0 and total_sum > last_total + 32000:
+            diff = total_sum - last_total
+            print(f"⚠️ Gesamtenergie-Sprung viel zu groß (+{diff} Wh, maximal erlaubt +{Max_Energiesprung_Tag} Wh) → verworfen.")
             total_sum = last_total
 
-        elif total_sum > last_total + 1600:
+        # ----------- Einzelabrufgrenze (Max_Energiesprung) -----------
+        elif Max_Energiesprung > 0 and total_sum > last_total + 1600:
             diff = total_sum - last_total
-            print(f"⚠️ Gesamtenergie-Sprung moderat groß (+{diff} Wh, maximal erlaubt +32000 Wh) → begrenzt auf +1600 Wh.")
+            print(
+                f"⚠️ Gesamtenergie-Sprung moderat groß (+{diff} Wh, maximal erlaubt +{Max_Energiesprung} Wh) "
+                f"→ begrenzt auf +{Max_Energiesprung} Wh."
+            )
             total_sum = last_total + 1600
 
     state["TOTAL_SUM_ALT"] = total_sum
