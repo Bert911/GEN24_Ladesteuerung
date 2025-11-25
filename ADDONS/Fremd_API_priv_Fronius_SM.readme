@@ -116,7 +116,7 @@ def load_state():
         }
         for dev in SMARTMETER_DEVICES
     }
-    state["energy_total_ALT"] = energy_initial__total
+    state["energy_total_ALT"] = energy_initial_total
     print(f"energy_total_ALT initial auf {energy_initial_total} gesetzt.")
     return state
 
