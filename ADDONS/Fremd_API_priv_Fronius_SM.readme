@@ -5,25 +5,21 @@ import time
 from datetime import datetime
 
 
-# >>>>>>>>  Hier Änderungen vornehmen  >>>>>>>>>>>>>>>>>>>>>
-# EINMALIGER INITIAL-WERT (muss manuell gesetzt werden)
-# Wird nur beim allerersten Start genutzt.
-# Hier Gesamtproduktionswert von allen abzurufenden Smartmetern einfügen.
+# >>>>>>>>  Hier Änderungen vornehmen  >>>>>>>>>>>>>>>>>>>>> ganz unten sind weitere Tipps bei Problemen
 
-INITIAL_TOTAL_ENERGY = 12673883           # Beispielwert in Wh – bitte anpassen!
+INITIAL_TOTAL_ENERGY = 12693598             # EINMALIGER INITIAL-WERT (muss manuell gesetzt werden)Beispielwert in Wh
+#                                           Gesamtproduktionswert von allen abzurufenden Smartmetern einfügen
 
-SMARTMETER_DEVICES = [                 # Smartmeter-Device-Namen (nur neue GEN24 Struktur ab FW 1.39.5-1)
+SMARTMETER_DEVICES = [                      # Smartmeter-Device-Namen (nur neue GEN24 Struktur ab FW 1.39.5-1)
     "Fronius_SmartMeter_2223836ab422",
     "Fronius_SmartMeter_4d68ed529a2d"
 ]
 
-GEN24_IP = "192.168.178.42"            # Gen24 IP Adresse
-
-Summenpruefung_aktiv = 1               # 1 = an, 0 = aus
-Leistung_WR = 7500                     # größter WR in der Anlage
-
-Max_Energiesprung = Leistung_WR / 5     # pro Abruf
-Max_Energiesprung_Tag = Leistung_WR * 8 # Tages-Sicherheit (optional)
+GEN24_IP = "192.168.178.42"                # Gen24 IP Adresse
+Summenpruefung_aktiv = 1                   # 1 = an, 0 = aus; Prüfung mit Initialwert am Ende bitte manuel entfernen.
+Leistung_WR = 7500                         # Leistung des größten WR/Smartmeter in der Anlage
+Max_Energiesprung = Leistung_WR / 5        # pro Abruf
+Max_Energiesprung_Tag = Leistung_WR * 8    # Tages-Sicherheit (optional)
 
 
 # >>>>>>>>  Unterhalb nach Bedarf ändern  >>>>>>>>>>>>>>>>>>>>>
@@ -273,26 +269,33 @@ def get_API(data):
 
     last_total = state.get("TOTAL_SUM_ALT", 0)
 
-    if last_total == 0:
-        print(f"Erster Start → TOTAL_SUM_ALT = {total_sum}")
+    if Summenpruefung_aktiv:
+        if last_total == 0:
+            print(f"Erster Start → TOTAL_SUM_ALT = {total_sum}")
 
-    elif total_sum < last_total:
-        print(f"⚠️ Gesamtenergie rückläufig ({total_sum} < {last_total}) → nutze alten Wert.")
-        total_sum = last_total
+        elif total_sum < last_total:
+            print(f"⚠️ Gesamtenergie rückläufig ({total_sum} < {last_total}) → nutze alten Wert.")
+            total_sum = last_total
 
-    elif total_sum > last_total + 32000:
-        print(f"⚠️ Gesamtenergie-Sprung zu groß (+{total_sum - last_total}) → verworfen.")
-        total_sum = last_total
+        elif total_sum > last_total + 32000:
+            print(f"⚠️ Gesamtenergie-Sprung zu groß (+{total_sum - last_total}) → verworfen.")
+            total_sum = last_total
 
-    elif total_sum > last_total + 1600:
-        diff = total_sum - last_total
-        print(f"⚠️ Gesamtenergie-Sprung moderat groß (+{diff} Wh, maximal erlaubt +32000 Wh) → begrenzt auf +1600 Wh.")
-        total_sum = last_total + 1600
+        elif total_sum > last_total + 1600:
+            diff = total_sum - last_total
+            print(f"⚠️ Gesamtenergie-Sprung moderat groß (+{diff} Wh, maximal erlaubt +32000 Wh) → begrenzt auf +1600 Wh.")
+            total_sum = last_total + 1600
 
     state["TOTAL_SUM_ALT"] = total_sum
     save_state(state)
 
     # ---------------------- Ausgabe ----------------------
+
+    if INITIAL_TOTAL_ENERGY > total_sum:
+        total_sum=INITIAL_TOTAL_ENERGY
+        print(f"⚠️ Datenfehler: AC_Produktion aktualisiert auf Initialwert {INITIAL_TOTAL_ENERGY}")
+        print(f"⚠️ Bitte Summenpruefung in den Einstellungen aktivieren")
+        print(f"Eine kleine Hilfe ist am Ende des Fremd_API Skriptes")
 
     Fremd_API = {
         "aktuellePVProduktion": total_mean,
@@ -304,3 +307,34 @@ def get_API(data):
     print("GesamtEnergieSM:", Fremd_API["AC_Produktion"], "\n")
 
     return Fremd_API
+#*
+Empfehlung für Verbindungsfehler:
+Die Standardeinstellung der OptenDTU sollte sein, dass dieser nur sendet,
+wenn alle Wechselrichter der DTU eine aktive Verbindung haben.
+Sollte ein Wechselrichter nicht erreichbar sein, werden von der DTU keine neuen Daten an den Fronius übergeben.
+Dadurch können positive Datensprünge entstehen.
+Bei mir kam es ebenfalls vor, dass beim Neustart der DTU auch zu wenig Energie an Fronius übermittelt wurde, was es nicht besser macht.
+
+Im zweifelsfall deaktivere ich den GEN24 (ausschalten oder vom Netzwerk trennen), dadurch bekommt er keine Daten mehr von der DTU.
+Wenn die DTU und aller WR dann wieder aktiv sind, darf der GEN24 wieder online gehen.
+
+Die Einstellung der Sendeleistung der DTU hat bei mir nur relativ wenig gebracht.
+Da war die Position der DTU sowie die ausrichtung der Antenne viel entscheidender.
+
+Bei mehr wie 3 Wechselrichter an einer DTU empfehler ich eine 2. DTU,
+die kosten halten sich ja in Grenzen und die Sprünge bei Datenverlust werden gleichzeitig halbiert.
+
+Die vielen Sicherheitsmechanismen kommen von er alten GEN24 Firmware (1.38),
+wo der GEN24 einfach manchmal noch ein zusätzliches Smartmeter erfunden hatte.
+Manchmal hat er bei mir auch die beiden ID vertauscht oder die Daten eines Smartmeter bei beiden IDs ausgegeben.
+Damit ich dann wenigstens eine vernünftige Historie habe, wurden die ganzen Sicherheitsmechanismen eingeführt.
+
+Vielen Dank geht insbesonders an Wiggal
+https://github.com/wiggal/
+*#
+
+
+
+
+
+
