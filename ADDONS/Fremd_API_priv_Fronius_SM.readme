@@ -8,21 +8,21 @@ from datetime import datetime
 # >>>>>>>>  Hier Änderungen vornehmen  >>>>>>>>>>>>>>>>>>>>>
 # Ganz unten stehen weitere Tipps bei Verbindungs- und Datenproblemen.
 
-energy_initial_total = 12694835             # EINMALIGER Startwert (manuell setzen)
-#                                           Gesamtproduktionswert aller Smartmeter in Wh
-#                                           wird als letzte Sicherheit genutzt und nicht aktualisiert
+energy_initial_total = 12694835              # EINMALIGER Startwert (manuell setzen)
+#                                              Gesamtproduktionswert aller Smartmeter in Wh
+#                                              wird als letzte Sicherheit genutzt und nicht aktualisiert
 
 
-smartmeter_devices = [                      # Smartmeter-Device-Namen (neue GEN24-Struktur ab Firmware 1.39.5-1)
-    "Fronius_SmartMeter_2223836ab422",      # inkompatibel mit vorheriger Firmware
+smartmeter_devices = [                       # Smartmeter-Device-Namen (neue GEN24-Struktur ab Firmware 1.39.5-1)
+    "Fronius_SmartMeter_2223836ab422",       # inkompatibel mit vorheriger Firmware
     "Fronius_SmartMeter_4d68ed529a2d"
 ]
 
-GEN24_IP = "192.168.178.42"                # IP-Adresse des GEN24
-Summenpruefung_aktiv = 1                   # 1 = aktiv, 0 = deakt. (Prüfung mit Startwert bleibt immer erhalten)
-Leistung_WR = 7500                         # Leistung des größten Wechselrichters / Smartmeters
-Max_Energiesprung = Leistung_WR / 5        # maximal zulässiger Energiesprung pro Abruf/Smartmeter (0 zum deakt.)
-Max_Energiesprung_Tag = Leistung_WR * 8    # tägliche Sicherheitsgrenze pro Smartmeter (0 zum deakt.)
+GEN24_IP = "192.168.178.42"                  # IP-Adresse des GEN24
+Summenpruefung_aktiv = 1                     # 1 = aktiv, 0 = deakt. (Prüfung mit Startwert bleibt immer erhalten)
+Leistung_WR = 7500                           # Leistung des größten Wechselrichters / Smartmeters
+Max_Energiesprung = Leistung_WR / 5          # maximal zulässiger Energiesprung pro Abruf/Smartmeter (0 zum deakt.)
+Max_Energiesprung_Tag = Leistung_WR * 8      # tägliche Sicherheitsgrenze pro Smartmeter (0 zum deakt.)
 
 
 # >>>>>>>>  Unterhalb nur bei Bedarf ändern  >>>>>>>>>>>>>>>>>>>>>
@@ -43,27 +43,14 @@ def fetch_gen24_data():
         print(f"Fehler beim Abrufen der GEN24-Daten: {e}")
         return {}
 
-
-def extract_devices_struct(data):
-    """
-    Datenstruktur aus externem Script prüfen.
-    Zulässig:
-        data["Body"]["Data"]
-        data["Data"]
-        direkt data (falls schon vorverarbeitet)
-    Gibt die Smartmeter (Smartmeter_name -> {attributes, channels, ...}) zurück.
-    """
-    if isinstance(data, dict):
-        # Fall: komplette API-Antwort mit Body->Data
-        if "Body" in data and isinstance(data["Body"], dict) and "Data" in data["Body"]:
-            return data["Body"]["Data"]
-        # Fall: direktes Data-Feld
-        if "Data" in data and isinstance(data["Data"], dict):
-            return data["Data"]
-        # Wenn dict, aber schon devices
-        return data
+def extract_devices_struct(raw): # Extrahiert die Smartmeter-Daten aus der API-Antwort
+    if isinstance(raw, dict):
+        if "Body" in raw and isinstance(raw["Body"], dict) and "Data" in raw["Body"]:
+            return raw["Body"]["Data"]
+        if "Data" in raw and isinstance(raw["Data"], dict):
+            return raw["Data"]
+        return raw
     return {}
-
 
 def load_state():
     """State aus Datei laden. Bei Fehlern, leeren Dateien oder veralteter Struktur wird ein neuer State erzeugt.
