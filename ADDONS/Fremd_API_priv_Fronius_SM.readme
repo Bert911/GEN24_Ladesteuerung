@@ -162,6 +162,9 @@ def get_API(data_temp):
     power_total = 0
     energy_total = 0
 
+    # Einmal GEN24-Daten abrufen, um sie für Direktabrufe zu nutzen
+    fresh_data = fetch_gen24_data()
+
     # Geräte aus der übergebenen Struktur extrahieren (robust gegenüber unterschiedlichen Formen)
     smartmeter_map = extract_devices_struct(data_temp)
 
@@ -184,19 +187,27 @@ def get_API(data_temp):
         sm_energy = None
 
         # ---------- Daten lesen ----------
-        ch = smartmeter_map.get(smartmeter_name, {}).get("channels", {})
+        try:
+            sm_power_raw = ch.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", None)
+            if sm_power_raw is not None:
+                sm_power = int(sm_power_raw)
+        except Exception:
+            sm_power = None
 
-        # sichere Umwandlung in int, None → 0
-        sm_power = int(ch.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0) or 0)
-        sm_energy = int(ch.get("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64", 0) or 0)
+        try:
+            sm_energy_raw = ch.get("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64", None)
+            if sm_energy_raw is not None:
+                sm_energy = int(sm_energy_raw)
+        except Exception:
+            sm_energy = None
 
-        # Wenn Summe fehlt → Direktabruf GEN24 (max. 2 Versuche)
+        # ---------- Direktabruf bei fehlender Summe (max. 2 Versuche) ----------
         if sm_energy is None:
-            sm_energy, sm_power = try_direct_read(smartmeter_name, wait_seconds=30, attempt=1)
+            sm_energy, sm_power = try_direct_read(smartmeter_name, data=fresh_data, wait_seconds=30, attempt=1)
         if sm_energy is None:
-            sm_energy, sm_power = try_direct_read(smartmeter_name, wait_seconds=30, attempt=2)
+            sm_energy, sm_power = try_direct_read(smartmeter_name, data=fresh_data, wait_seconds=30, attempt=2)
 
-        # Wenn immer noch kein Wert → Fallback auf gespeicherten State
+        # ---------- Fallback auf gespeicherten State ----------
         if sm_energy is None:
             print(f"{smartmeter_name}: Fallback genutzt – alte Werte.")
             sm_energy = sm_state.get("energy_last2", 0)
@@ -212,7 +223,6 @@ def get_API(data_temp):
         if sm_energy == sm_state["energy_last2"] and 8 <= now.hour < 18:
             sm_state["stale_count"] += 1
             print(f"{smartmeter_name}: unverändert, Zähler = {sm_state['stale_count']}")
-            # sm_power kann 0 sein; Division int ok
             sm_energy = int(sm_state["energy_calc"] + (sm_power or 0) / 8)
             sm_state["energy_calc"] = sm_energy
 
@@ -223,7 +233,7 @@ def get_API(data_temp):
             print(f"{smartmeter_name}: Fehler Produktionswert ({sm_power}), nutze alten Wert.")
             sm_power = sm_state["power_last"]
 
-        # ---------- Prüfung Summe----------
+        # ---------- Prüfung Summe ----------
         if Summenpruefung_aktiv:
             min_val = min(sm_state["energy_calc"], sm_state["energy_last2"])
             max_val = max(sm_state["energy_calc"], sm_state["energy_last2"])
@@ -244,8 +254,7 @@ def get_API(data_temp):
         power_total += sm_power
         energy_total += sm_energy
 
-# ---------------------- Gesamt-Sicherheitslogik ----------------------
-
+    # ---------------------- Gesamt-Sicherheitslogik ----------------------
     energy_last_total = smartmeter_state.get("energy_last_total", 0)
     if Summenpruefung_aktiv:
         if energy_last_total == 0:
@@ -255,28 +264,22 @@ def get_API(data_temp):
             print(f"⚠️ Gesamtenergie rückläufig ({energy_total} < {energy_last_total}) → nutze alten Wert.")
             energy_total = energy_last_total
 
-        # ----------- Tagesgrenze (Max_Energiesprung_Tag) -----------
         elif Max_Energiesprung_Tag > 0 and energy_total > energy_last_total + 32000:
             diff = energy_total - energy_last_total
             print(f"⚠️ Gesamtenergie-Sprung viel zu groß (+{diff} Wh, maximal erlaubt +{Max_Energiesprung_Tag} Wh) → verworfen.")
             energy_total = energy_last_total
 
-        # ----------- Einzelabrufgrenze (Max_Energiesprung) -----------
         elif Max_Energiesprung > 0 and energy_total > energy_last_total + 1600:
             diff = energy_total - energy_last_total
-            print(
-                f"⚠️ Gesamtenergie-Sprung moderat groß (+{diff} Wh, maximal erlaubt +{Max_Energiesprung} Wh) "
-                f"→ begrenzt auf +{Max_Energiesprung} Wh."
-            )
+            print(f"⚠️ Gesamtenergie-Sprung moderat groß (+{diff} Wh, maximal erlaubt +{Max_Energiesprung} Wh) → begrenzt auf +{Max_Energiesprung} Wh.")
             energy_total = energy_last_total + 1600
 
     smartmeter_state["energy_last_total"] = energy_total
     save_state(smartmeter_state)
 
     # ---------------------- Ausgabe ----------------------
-
     if energy_initial_total > energy_total:
-        energy_total=energy_initial_total
+        energy_total = energy_initial_total
         print(f"⚠️ Datenfehler: AC_Produktion aktualisiert auf Initialwert {energy_initial_total}")
         print(f"⚠️ Bitte Summenpruefung in den Einstellungen aktivieren")
         print(f"Eine kleine Hilfe ist am Ende des Fremd_API Skriptes")
