@@ -8,7 +8,7 @@ from datetime import datetime
 # >>>>>>>>  Hier Änderungen vornehmen  >>>>>>>>>>>>>>>>>>>>>
 # Ganz unten stehen weitere Tipps bei Verbindungs- und Datenproblemen.
 
-INITIAL_TOTAL_ENERGY = 12693598             # EINMALIGER Startwert (manuell setzen)
+INITIAL_TOTAL_ENERGY = 12694835             # EINMALIGER Startwert (manuell setzen)
 #                                           Gesamtproduktionswert aller Smartmeter in Wh
 #                                           wird als letzte Sicherheit genutzt und nicht aktualisiert
 
