@@ -80,16 +80,16 @@ def load_state():
                     # -------- energy_last_total hart prüfen (Typ + Mindestwert) ----------
                     elt_temp = smartmeter_state.get("energy_last_total", energy_initial_total)
                     try:
-                        elt_temp = int(elt)
+                        elt_temp = int(elt_temp)
                     except:
                         print("WARNUNG: energy_last_total hatte ungültigen Typ → auf Initialwert gesetzt.")
                         elt_temp = energy_initial_total
 
-                    if elt:temp < energy_initial_total:
+                    if elt_temp < energy_initial_total:
                         print(f"energy_last_total aktualisiert auf Initialwert {energy_initial_total}")
                         elt_temp = energy_initial_total
 
-                    smartmeter_state["energy_last_total"] = elt
+                    smartmeter_state["energy_last_total"] = elt_temp
 
                     # -------- Struktur aller Smartmeter prüfen --------
                     structure_corrected = False
