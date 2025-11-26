@@ -279,16 +279,6 @@ def get_API(data_temp):
             sm_energy = int(sm_state["energy_calc"] + (sm_power or 0) / 8)
             sm_state["energy_calc"] = sm_energy
 
-        # ---------- Stale Detection - Prüfen, ob der aktuelle Smartmeter-Wert unverändert ist (Stale)
-        if sm_energy == sm_state["energy_last2"]:
-            sm_state["stale_count"] += 1
-            print(f"{smartmeter_name}: unverändert, Zähler = {sm_state['stale_count']}")
-
-            # Während der Produktionszeit Werte hochrechnen
-            if 8 <= now.hour < 18:
-                sm_energy = int(sm_state["energy_calc"] + (sm_power or 0) / 8)
-                sm_state["energy_calc"] = sm_energy
-
         # ---------- Power_Last Sicherheitslogik - Power_Last auf 0 setzen, wenn Smartmeter lange keine neuen Werte liefert oder außerhalb PV-Zeit
         if sm_state["stale_count"] >= 18 or now.hour < 8 or now.hour >= 18:
             if sm_state["power_last"] != 0:
