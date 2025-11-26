@@ -2,6 +2,7 @@ import json
 import os
 import requests
 import time
+import re
 from datetime import datetime
 
 
@@ -11,6 +12,7 @@ from datetime import datetime
 energy_initial_total = 12696496              # EINMALIGER Startwert (manuell setzen)
 #                                              Gesamtproduktionswert aller Smartmeter in Wh
 #                                              wird als letzte Sicherheit genutzt und nicht aktualisiert
+#                                              am besten VOR Veränderungen in diesem Skript oder der FremdAPI_last.json aktualisieren
 
 smartmeter_devices = [                       # Smartmeter-Device-Namen (neue GEN24-Struktur ab Firmware 1.39.5-1)
     "Fronius_SmartMeter_2223836ab422",       # inkompatibel mit vorheriger Firmware
@@ -52,47 +54,84 @@ def extract_devices_struct(raw):             # Extrahiert die Smartmeter-Daten a
     return {}
 
 def load_state():
-    """State aus Datei laden. Bei Fehlern, leeren Dateien oder veralteter Struktur wird ein neuer State erzeugt.
-       energy_last_total wird automatisch auf einen sicheren Startwert gesetzt."""
+    """State aus Datei laden. Bei defekter JSON wird versucht,
+       energy_last_total aus dem Rohtext zu retten."""
+
+    recovered_energy_last_total = None
 
     if os.path.exists(SAVE_FILE):
         try:
             with open(SAVE_FILE, "r") as f:
                 content = f.read().strip()
-                if content == "":
-                    print("WARNUNG: FremdAPI_last.json ist leer → neue Struktur wird erzeugt.")
-                else:
+
+            # ------------------------------------------------------------------
+            # Fall 1: Datei leer → neue Struktur
+            # ------------------------------------------------------------------
+            if not content:
+                print("WARNUNG: FremdAPI_last.json ist leer → neuer State wird erzeugt.")
+
+            else:
+                # ------------------------------------------------------------------
+                # Versuch: JSON normal parsen
+                # ------------------------------------------------------------------
+                try:
                     smartmeter_state = json.loads(content)
 
-                    # Datei vorhanden & lesbar → energy_last_total korrekt initialisieren
-                    if smartmeter_state.get("energy_last_total", 0) < energy_initial_total:
+                    # -------- energy_last_total hart prüfen (Typ + Mindestwert) ----------
+                    elt = smartmeter_state.get("energy_last_total", energy_initial_total)
+                    try:
+                        elt = int(elt)
+                    except:
+                        print("WARNUNG: energy_last_total hatte ungültigen Typ → auf Initialwert gesetzt.")
+                        elt = energy_initial_total
 
+                    if elt < energy_initial_total:
                         print(f"energy_last_total aktualisiert auf Initialwert {energy_initial_total}")
-                        smartmeter_state["energy_last_total"] = energy_initial_total
+                        elt = energy_initial_total
 
-                    # alle Smartmeter in richtige Struktur bringen
+                    smartmeter_state["energy_last_total"] = elt
+
+                    # -------- Struktur aller Smartmeter prüfen --------
                     structure_corrected = False
-                    for smartmeter_name in smartmeter_devices:
-                        if smartmeter_name not in smartmeter_state or not isinstance(smartmeter_state.get(smartmeter_name), dict):
-                            print(f"{smartmeter_name}: alte oder ungültige Struktur → wird neu initialisiert.")
-                            smartmeter_state[smartmeter_name] = {
-                                "power_last": 0,      # letzter gültiger Leistungswert
-                                "energy_calc": 0, # berechnete Energiesumme
-                                "energy_last2": 0,      # letzter echter Zählerstand
-                                "stale_count": 0    # unverändert-Zähler
+                    for name in smartmeter_devices:
+                        if name not in smartmeter_state or not isinstance(smartmeter_state[name], dict):
+                            print(f"{name}: Struktur ungültig → wird neu initialisiert.")
+                            smartmeter_state[name] = {
+                                "power_last": 0,
+                                "energy_calc": 0,
+                                "energy_last2": 0,
+                                "stale_count": 0
                             }
                             structure_corrected = True
 
                     if structure_corrected:
-                        print("Strukturfehler korrigiert – State wurde überarbeitet.")
+                        print("Strukturfehler korrigiert – State überarbeitet.")
 
                     return smartmeter_state
 
-        except Exception as e:
-            print(f"WARNUNG: JSON defekt ({e}) → neue Struktur wird erzeugt.")
+                # ------------------------------------------------------------------
+                # JSON kaputt → Recovery versuchen
+                # ------------------------------------------------------------------
+                except json.JSONDecodeError:
+                    print("WARNUNG: JSON defekt → versuche Recovery...")
 
-    # Datei fehlt oder defekt → komplett neuer State
-    print("Erzeuge neuen State...")
+                    # energy_last_total aus Rohtext extrahieren
+                    match = re.search(r'"energy_last_total"\s*:\s*(\d+)', content)
+                    if match:
+                        recovered_energy_last_total = int(match.group(1))
+                        print(f"Recovery erfolgreich: energy_last_total extrahiert → {recovered_energy_last_total}")
+                    else:
+                        print("Recovery fehlgeschlagen: energy_last_total nicht gefunden.")
+
+        except Exception as e:
+            print(f"WARNUNG: Fehler beim Lesen ({e}) → Recovery wird versucht...")
+
+    # ------------------------------------------------------------------
+    # Datei fehlt ODER JSON defekt ODER Recovery erfolglos
+    # → neue Datei erzeugen
+    # ------------------------------------------------------------------
+    print("Erzeuge neue JSON Datei")
+
     smartmeter_state = {
         smartmeter_name: {
             "power_last": 0,
@@ -102,8 +141,16 @@ def load_state():
         }
         for smartmeter_name in smartmeter_devices
     }
-    smartmeter_state["energy_last_total"] = energy_initial_total
-    print(f"energy_last_total initial auf {energy_initial_total} gesetzt.")
+
+    # energy_last_total setzen
+    if recovered_energy_last_total is not None:
+        # Niemals kleiner als Initialwert!
+        smartmeter_state["energy_last_total"] = max(recovered_energy_last_total, energy_initial_total)
+        print(f"energy_last_total aus defekter Datei wiederhergestellt → {smartmeter_state['energy_last_total']}")
+    else:
+        smartmeter_state["energy_last_total"] = energy_initial_total
+        print(f"energy_last_total initial auf {energy_initial_total} gesetzt.")
+
     return smartmeter_state
 
 
