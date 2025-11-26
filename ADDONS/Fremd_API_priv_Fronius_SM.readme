@@ -284,7 +284,7 @@ def get_API(data_temp):
             min_val = min(sm_state["energy_calc"], sm_state["energy_last2"])
             max_val = max(sm_state["energy_calc"], sm_state["energy_last2"])
 
-            if min_val <= sm_energy <= (max_val + Max_Energiesprung):
+            if min_val <= sm_energy <= (max_val + 16000):
                 sm_state["energy_last2"] = sm_energy
             elif (min_val - 800) <= sm_energy:
                 sm_energy = int(max_val)
