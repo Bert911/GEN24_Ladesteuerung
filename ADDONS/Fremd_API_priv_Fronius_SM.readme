@@ -265,19 +265,19 @@ def get_API(data_temp):
             sm_state["energy_calc"] = sm_energy
             sm_state["energy_last"] = sm_energy
 
-        # ---------- Stale Detection ----------
-        if sm_energy == sm_state["energy_last"] and 8 <= now.hour < 18:
-            sm_state["stale_count"] += 1
-            print(f"{smartmeter_name}: unverändert, Zähler = {sm_state['stale_count']}")
-            sm_energy = int(sm_state["energy_calc"] + (sm_power or 0) / 8)
-            sm_state["energy_calc"] = sm_energy
-
         # ---------- Prüfung Power ----------
         if sm_power is not None and 0 <= sm_power < Leistung_WR:
             sm_state["power_last"] = sm_power
         else:
             print(f"{smartmeter_name}: Fehler Produktionswert ({sm_power}), nutze alten Wert.")
             sm_power = sm_state["power_last"]
+
+        # ---------- Stale Detection ----------
+        if sm_energy == sm_state["energy_last"] and 8 <= now.hour < 18:
+            sm_state["stale_count"] += 1
+            print(f"{smartmeter_name}: unverändert, Zähler = {sm_state['stale_count']}")
+            sm_energy = int(sm_state["energy_calc"] + (sm_power or 0) / 8)
+            sm_state["energy_calc"] = sm_energy
 
         # ---------- Prüfung Summe ----------
         if Summenpruefung_aktiv:
