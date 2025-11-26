@@ -78,16 +78,16 @@ def load_state():
                     smartmeter_state = json.loads(content)
 
                     # -------- energy_last_total hart prüfen (Typ + Mindestwert) ----------
-                    elt = smartmeter_state.get("energy_last_total", energy_initial_total)
+                    elt_temp = smartmeter_state.get("energy_last_total", energy_initial_total)
                     try:
-                        elt = int(elt)
+                        elt_temp = int(elt)
                     except:
                         print("WARNUNG: energy_last_total hatte ungültigen Typ → auf Initialwert gesetzt.")
-                        elt = energy_initial_total
+                        elt_temp = energy_initial_total
 
-                    if elt < energy_initial_total:
+                    if elt:temp < energy_initial_total:
                         print(f"energy_last_total aktualisiert auf Initialwert {energy_initial_total}")
-                        elt = energy_initial_total
+                        elt_temp = energy_initial_total
 
                     smartmeter_state["energy_last_total"] = elt
 
