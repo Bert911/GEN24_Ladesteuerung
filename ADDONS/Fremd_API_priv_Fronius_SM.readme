@@ -316,15 +316,15 @@ def get_API(data_temp):
             print(f"⚠️ Gesamtenergie rückläufig ({energy_total} < {energy_last_total}) → nutze alten Wert.")
             energy_total = energy_last_total
 
-        elif Max_Energiesprung_Tag > 0 and energy_total > energy_last_total + Max_Energiesprung_Tag*len(SMARTMETER_DEVICES):
+        elif Max_Energiesprung_Tag > 0 and energy_total > energy_last_total + Max_Energiesprung_Tag*len(smartmeter_devices):
             diff = energy_total - energy_last_total
             print(f"⚠️ Gesamtenergie-Sprung viel zu groß (+{diff} Wh, maximal erlaubt +{Max_Energiesprung_Tag} Wh) → verworfen.")
             energy_total = energy_last_total
 
-        elif Max_Energiesprung > 0 and energy_total > energy_last_total + Max_Energiesprung*len(SMARTMETER_DEVICES):
+        elif Max_Energiesprung > 0 and energy_total > energy_last_total + Max_Energiesprung*len(smartmeter_devices):
             diff = energy_total - energy_last_total
             print(f"⚠️ Gesamtenergie-Sprung moderat groß (+{diff} Wh, maximal erlaubt +{Max_Energiesprung} Wh) → begrenzt auf +{Max_Energiesprung} Wh.")
-            energy_total = energy_last_total + Max_Energiesprung*len(SMARTMETER_DEVICES)
+            energy_total = energy_last_total + Max_Energiesprung*len(smartmeter_devices)
 
     smartmeter_state["energy_last_total"] = energy_total
     save_state(smartmeter_state)
