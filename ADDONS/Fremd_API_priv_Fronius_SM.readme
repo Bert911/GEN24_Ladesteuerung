@@ -240,7 +240,11 @@ def get_API(data_temp):
         smartmeter_state[smartmeter_name] = sm_state  # falls neu angelegt
 
         # ----------- Zugriff auf übergebene Data-Struktur ----------- 
-        ch = smartmeter_map.get(smartmeter_name, {}).get("channels", {})
+        device = smartmeter_map.get(smartmeter_name)
+        if isinstance(device, dict):
+            ch = device.get("channels") if isinstance(device.get("channels"), dict) else {}
+        else:
+            ch = {}
 
         # Werte einlesen
         sm_power = None
