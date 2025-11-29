@@ -173,12 +173,11 @@ def reset_counters(smartmeter_state):
         print("Tagesreset: stale_count auf 0 gesetzt.")
 
 
-def try_direct_read(smartmeter_name, data=None, wait_seconds=Wartezeit, attempt=1):
-    """Direktabruf vom GEN24, nutzt übergebene Daten, kein wiederholtes fetch"""
-    
-    if wait_seconds > 0:
-        print(f"{smartmeter_name}: Warte {wait_seconds}s vor Direktabruf (Versuch {attempt})...")
-        time.sleep(wait_seconds)
+def try_direct_read(smartmeter_name, data=None, attempt=1):
+    # Warte global definierte Zeit
+    if Wartezeit > 0:
+        print(f"{smartmeter_name}: Warte {Wartezeit}s vor Direktabruf (Versuch {attempt})...")
+        time.sleep(Wartezeit)
 
     # Extrahiere Geräteliste (sicherheitshalber default {} setzen)
     sm_map = extract_devices_struct(data or {}) or {}
@@ -268,9 +267,9 @@ def get_API(data_temp):
 
         # ---------- Direktabruf bei fehlender Summe (max. 2 Versuche) ----------
         if sm_energy is None:
-            sm_energy, sm_power = try_direct_read(smartmeter_name, data=fresh_data, wait_seconds=Wartezeit, attempt=1)
+            sm_energy, sm_power = try_direct_read(smartmeter_name, data=fresh_data, attempt=1)
         if sm_energy is None:
-            sm_energy, sm_power = try_direct_read(smartmeter_name, data=fresh_data, wait_seconds=Wartezeit, attempt=2)
+            sm_energy, sm_power = try_direct_read(smartmeter_name, data=fresh_data, attempt=2)
 
         # ---------- Fallback auf gespeicherten State ----------
         if sm_energy is None:
