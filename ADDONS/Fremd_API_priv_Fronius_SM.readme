@@ -179,9 +179,23 @@ def try_direct_read(smartmeter_name, data=None, wait_seconds=30, attempt=1):
         print(f"{smartmeter_name}: Warte {wait_seconds}s vor Direktabruf (Versuch {attempt})...")
         time.sleep(wait_seconds)
 
+    # Extrahiere Geräteliste (sicherheitshalber default {} setzen)
     sm_map = extract_devices_struct(data or {}) or {}
-    ch = sm_map.get(smartmeter_name, {}).get("channels", {})
 
+    # Hole das Device-Objekt; prüfe, ob es ein dict ist
+    device = sm_map.get(smartmeter_name)
+    if not isinstance(device, dict):
+        # entweder Device fehlt oder ist None/kein Dict -> keine Channels verfügbar
+        print(f"{smartmeter_name}: Direktabruf fehlgeschlagen (Versuch {attempt}) → Device nicht vorhanden oder ungültig")
+        return None, None
+
+    # Hole Channels und prüfe ebenfalls auf dict
+    ch = device.get("channels")
+    if not isinstance(ch, dict):
+        print(f"{smartmeter_name}: Direktabruf fehlgeschlagen (Versuch {attempt}) → Channels fehlen oder ungültig")
+        return None, None
+
+    # sichere Kanal-Leseversuche
     sm_energy_raw = ch.get("SMARTMETER_ENERGYACTIVE_PRODUCED_SUM_F64")
     sm_power_raw = ch.get("SMARTMETER_POWERACTIVE_MEAN_SUM_F64", 0)
 
