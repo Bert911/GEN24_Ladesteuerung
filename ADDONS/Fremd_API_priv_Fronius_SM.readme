@@ -346,6 +346,8 @@ def get_API(data_temp):
     print("GesamtEnergieSM:", Fremd_API["AC_Produktion"], "\n")
 
     return Fremd_API
+
+
 """
 Empfehlungen bei Verbindungsproblemen:
 
