@@ -397,6 +397,8 @@ bei der der GEN24 teilweise zusätzliche Smartmeter „erfunden“ hat.
 Manchmal hat er sogar die beiden IDs vertauscht oder die Werte eines Smartmeters unter beiden IDs ausgegeben.
 Damit daraus dennoch eine korrekte Historie entsteht, wurden alle diese Schutzmechanismen eingeführt.
 
+Anscheinend bestehen die Probleme noch in geringer Form mit der 1.39
+
 Vielen Dank insbesondere an Wiggal:
 https://github.com/wiggal/
 """
