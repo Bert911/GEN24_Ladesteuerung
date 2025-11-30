@@ -335,7 +335,7 @@ def get_API(data_temp):
 
         elif Max_Energiesprung_Tag > 0 and energy_total > energy_last_total + Max_Energiesprung_Tag*len(smartmeter_devices):
             diff = energy_total - energy_last_total
-            print(f"⚠️ Gesamtenergie-Sprung viel zu groß (+{diff} Wh, maximal erlaubt +{Max_Energiesprung_Tag} Wh) → verworfen.")
+            print(f"⚠️ Gesamtenergie-Sprung viel zu groß (+{diff} Wh, maximal erlaubt +{Max_Energiesprung_Tag*len(smartmeter_devices)} Wh) → verworfen.")
             energy_total = energy_last_total
 
         elif Max_Energiesprung > 0 and energy_total > energy_last_total + Max_Energiesprung*len(smartmeter_devices):
