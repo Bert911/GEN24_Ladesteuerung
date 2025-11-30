@@ -292,7 +292,7 @@ def get_API(data_temp):
         # Stale Detection: Wenn ENERGY unverändert, aber Power größer 0 → nächster Energiewert wird berechnet
         if sm_energy == sm_state["energy_last"] and sm_power > 60 and 8 <= now.hour < 18:
             sm_state["stale_count"] += 1
-            print(f"{smartmeter_name}: unverändert, Zähler = {sm_state['stale_count'], berechne neuen Wert}")
+            print(f"{smartmeter_name}: unverändert, Zähler = {sm_state['stale_count']}, berechne neuen Wert")
             sm_energy = int(sm_state["energy_calc"] + (sm_power or 0) / 8)
             sm_state["energy_calc"] = sm_energy
 
