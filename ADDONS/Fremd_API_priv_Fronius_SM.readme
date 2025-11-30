@@ -365,7 +365,7 @@ def get_API(data_temp):
 
 
 """
-Empfehlungen bei Verbindungsproblemen:
+Empfehlungen und Hinweise:
 
 Die Standard-Einstellung der OpenDTU sollte sein, dass diese nur sendet,
 wenn alle Wechselrichter der DTU eine aktive Verbindung haben.
