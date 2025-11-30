@@ -348,10 +348,9 @@ def get_API(data_temp):
 
     # ---------------------- Ausgabe ----------------------
     if energy_initial_total > energy_total:
-        energy_total = energy_initial_total
+        energy_total = energy_initial_total  # Zusätzliche Sicherheit, falls Summenprüfung deaktiviert ist
         print(f"⚠️ Datenfehler: AC_Produktion aktualisiert auf Initialwert {energy_initial_total}")
         print(f"⚠️ Bitte Summenpruefung in den Einstellungen aktivieren")
-        print(f"Eine kleine Hilfe ist am Ende des Fremd_API Skriptes")
 
     Fremd_API = {
         "aktuellePVProduktion": power_total,
