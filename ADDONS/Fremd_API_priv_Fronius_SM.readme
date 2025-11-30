@@ -290,19 +290,19 @@ def get_API(data_temp):
             sm_power = sm_state["power_last"]
 
         # Stale Detection: Wenn ENERGY unverändert, aber Power größer 0 → nächster Energiewert wird berechnet
-        if sm_energy == sm_state["energy_last"] and 8 <= now.hour < 18:
+        if sm_energy == sm_state["energy_last"] and sm_power > 60 and 8 <= now.hour < 18:
             sm_state["stale_count"] += 1
             print(f"{smartmeter_name}: unverändert, Zähler = {sm_state['stale_count']}")
             sm_energy = int(sm_state["energy_calc"] + (sm_power or 0) / 8)
             sm_state["energy_calc"] = sm_energy
 
-        # ---------- Power_Last Sicherheitslogik - Power_Last auf 0 setzen, wenn Smartmeter lange keine neuen Werte liefert oder außerhalb PV-Zeit
+        # Power_Last auf 0 setzen, wenn Smartmeter lange keine neuen Werte liefert oder außerhalb PV-Zeit
         if sm_state["stale_count"] >= 18 or now.hour < 8 or now.hour >= 18:
             if sm_state["power_last"] != 0:
                 sm_state["power_last"] = 0
                 print(f"{smartmeter_name}: Power_Last auf 0 gesetzt wegen längerem Stillstand oder außerhalb PV-Zeit")
 
-        # ---------- Prüfung Summe ----------
+        # Prüfung der SM Werte (ob der Gen24 die Werte des richtigen SM gesendet hat)
         if Summenpruefung_aktiv:
             min_val = min(sm_state["energy_calc"], sm_state["energy_last"])
             max_val = max(sm_state["energy_calc"], sm_state["energy_last"])
@@ -348,7 +348,7 @@ def get_API(data_temp):
 
     # ---------------------- Ausgabe ----------------------
     if energy_initial_total > energy_total:
-        energy_total = energy_initial_total  # Zusätzliche Sicherheit, falls Summenprüfung deaktiviert ist
+        energy_total = energy_initial_total  # Zusätzliche Sicherheit, trotz deaktivierter Summenprüfung
         print(f"⚠️ Datenfehler: AC_Produktion aktualisiert auf Initialwert {energy_initial_total}")
         print(f"⚠️ Bitte Summenpruefung in den Einstellungen aktivieren")
 
