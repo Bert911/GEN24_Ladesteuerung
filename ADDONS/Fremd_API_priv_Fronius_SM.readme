@@ -276,7 +276,7 @@ def get_API(data_temp):
             sm_energy = sm_state.get("energy_last", 0)
             sm_power = sm_state.get("power_last", 0)
 
-        # ---------- Erste Initialisierung ----------
+        # Erste Initialisierung: energy_calc und energy_last auf den aktuellen Wert setzen
         if sm_state["energy_calc"] == 0 and sm_state["energy_last"] == 0:
             print(f"{smartmeter_name}: Erste Initialisierung → {sm_energy}")
             sm_state["energy_calc"] = sm_energy
