@@ -21,11 +21,11 @@ smartmeter_devices = [                       # Smartmeter-Device-Namen (neue GEN
 ]
 
 GEN24_IP = "192.168.178.42"                  # IP-Adresse des GEN24
-Summenpruefung_aktiv = 1                     # 1 = aktiv, 0 = deakt. (Prüfung mit Startwert bleibt immer erhalten)
 Leistung_WR = 7500                           # Leistung des größten Wechselrichters / Smartmeters
 Max_Energiesprung = Leistung_WR / 8          # maximal zulässiger Energiesprung pro Abruf/Smartmeter (0 zum deakt.)
 Max_Energiesprung_Tag = Leistung_WR * 2      # tägliche Sicherheitsgrenze pro Smartmeter (0 zum deakt.)
 Wartezeit = 60                               # Wartezeit vor dem Direktabruf in Sekunden
+Summenpruefung_aktiv = 1                     # 1 = aktiv, 0 = deakt. (Prüfung mit Startwert bleibt immer erhalten)
 
 
 # >>>>>>>>  Unterhalb nur bei Bedarf ändern  >>>>>>>>>>>>>>>>>>>>>
@@ -129,8 +129,7 @@ def load_state():
             print(f"WARNUNG: Fehler beim Lesen ({e}) → Recovery wird versucht...")
 
     # ------------------------------------------------------------------
-    # Datei fehlt ODER JSON defekt ODER Recovery erfolglos
-    # → neue Datei erzeugen
+    # Datei leer, fehlt, defekt, kein gültiges JSON oder unvollständiger Inhalt → neue State-Datei erzeugen.
     # ------------------------------------------------------------------
     print("Erzeuge neue JSON Datei")
 
