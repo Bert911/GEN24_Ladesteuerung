@@ -307,11 +307,11 @@ def get_API(data_temp):
             min_val = min(sm_state["energy_calc"], sm_state["energy_last"])
             max_val = max(sm_state["energy_calc"], sm_state["energy_last"])
 
-            if min_val <= sm_energy <= (max_val + Max_Energiesprung_Tag):
+            if min_val <= sm_energy <= (max_val + Max_Energiesprung_Tag): # Wenn der Wert innerhalb der Tagestoleranz
                 sm_state["energy_last"] = sm_energy
-            elif (min_val - Max_Energiesprung/2) <= sm_energy:
+            elif (min_val - Max_Energiesprung/2) <= sm_energy:            # Wenn der Wert durch Fehler geringfügig kleiner ist
                 sm_energy = max_val
-            else:
+            else:                                                         # Wenn der Wert falsch ist
                 old = sm_energy
                 sm_energy = int(max_val + sm_state["power_last"] / 8)
                 print(f"{smartmeter_name}: Fehler Summenwert ({old}) → Fallback {sm_energy}")
