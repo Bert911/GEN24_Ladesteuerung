@@ -369,8 +369,8 @@ Empfehlungen und Hinweise:
 
 Die Standard-Einstellung der OpenDTU sollte sein, dass diese nur sendet,
 wenn alle Wechselrichter der DTU eine aktive Verbindung haben.
---> unter Netzwerkeinstellungen->Modbus-Einstellungen:
-Modbus TCP Server aktivieren:     aktiv (blau)
+--> unter Netzwerkeinstellungen → Modbus-Einstellungen:
+Modbus TCP Server aktivieren: aktiv (blau)
 Modbus TCP Serverstart verzögern: aktiv (blau)
 
 Fällt ein Wechselrichter kurzzeitig aus, stoppt die DTU die Datenübertragung.
@@ -378,11 +378,11 @@ Beim nächsten Abruf meldet der GEN24 die in der Zwischenzeit erzeugte Energie a
 Da GEN24 und die PV-Planung die Leistung aus den Differenzen der kumulierten Energie berechnen,
 können so Spitzen entstehen, die die Historie verfälschen.
 
-Max_Energiesprung glättet kurze Ausfälle oder Messfehler pro Smartmeter/Abruf
+Max_Energiesprung glättet kurze Ausfälle oder Messfehler pro Smartmeter/Abruf.
 Max_Energiesprung_kommuliert begrenzt die anrechenbare Energie für längere Offline-Zeiten.
-Fehlerhafte GEN24-Werte werden aussortiert.
+Fehlerhafte GEN24-Werte werden zuverlässig aussortiert.
 
-Überschreitet ein Smartmeter die "kommulierte" grenze nach einem längeren Ausfall,
+Überschreitet ein Smartmeter die „kommulierte“ Grenze nach einem längeren Ausfall,
 kann Max_Energiesprung_kommuliert z. B. um Faktor 10 erhöht werden,
 damit sich die PV-Planung schrittweise wieder an den tatsächlichen Wert annähert.
 So bleiben Historie und Leistungsberechnung plausibel.
@@ -407,7 +407,7 @@ bei der der GEN24 teilweise zusätzliche Smartmeter „erfunden“ hat.
 Manchmal hat er sogar die beiden IDs vertauscht oder die Werte eines Smartmeters unter beiden IDs ausgegeben.
 Damit daraus dennoch eine korrekte Historie entsteht, wurden alle diese Schutzmechanismen eingeführt.
 
-Anscheinend bestehen die Probleme noch in geringer Form mit der 1.39
+Anscheinend bestehen die Probleme noch in geringer Form mit der 1.39.
 
 Vielen Dank insbesondere an Wiggal:
 https://github.com/wiggal/
