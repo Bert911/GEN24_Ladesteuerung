@@ -23,7 +23,7 @@ smartmeter_devices = [                       # Smartmeter-Device-Namen (neue GEN
 GEN24_IP = "192.168.178.42"                  # IP-Adresse des GEN24
 Leistung_WR = 7500                           # Leistung des größten Wechselrichters / Smartmeters
 Max_Energiesprung = Leistung_WR / 8          # maximal zulässiger Energiesprung pro Abruf/Smartmeter (0 zum deakt.)
-Max_Energiesprung_Tag = Leistung_WR * 2      # tägliche Sicherheitsgrenze pro Smartmeter (0 zum deakt.)
+Max_Energiesprung_kommuliert = Leistung_WR * 2      # tägliche Sicherheitsgrenze pro Smartmeter (0 zum deakt.)
 Wartezeit = 60                               # Wartezeit vor dem Direktabruf in Sekunden
 Summenpruefung_aktiv = 1                     # 1 = aktiv, 0 = deakt. (Prüfung mit Startwert bleibt immer erhalten)
 
@@ -307,7 +307,7 @@ def get_API(data_temp):
             min_val = min(sm_state["energy_calc"], sm_state["energy_last"])
             max_val = max(sm_state["energy_calc"], sm_state["energy_last"])
 
-            if min_val <= sm_energy <= (max_val + Max_Energiesprung_Tag): # Wenn der Wert innerhalb der Tagestoleranz
+            if min_val <= sm_energy <= (max_val + Max_Energiesprung_kommuliert): # Wenn der Wert innerhalb der großen Toleranz liegt
                 sm_state["energy_last"] = sm_energy
             elif (min_val - Max_Energiesprung/2) <= sm_energy:            # Wenn der Wert durch Fehler geringfügig kleiner ist
                 sm_energy = max_val
@@ -333,9 +333,9 @@ def get_API(data_temp):
             print(f"⚠️ Gesamtenergie rückläufig ({energy_total} < {energy_last_total}) → nutze alten Wert.")
             energy_total = energy_last_total
 
-        elif Max_Energiesprung_Tag > 0 and energy_total > energy_last_total + Max_Energiesprung_Tag*len(smartmeter_devices):
+        elif Max_Energiesprung_kommuliert > 0 and energy_total > energy_last_total + Max_Energiesprung_kommuliert*len(smartmeter_devices):
             diff = energy_total - energy_last_total
-            print(f"⚠️ Gesamtenergie-Sprung viel zu groß (+{diff} Wh, maximal erlaubt +{Max_Energiesprung_Tag*len(smartmeter_devices)} Wh) → verworfen.")
+            print(f"⚠️ Gesamtenergie-Sprung viel zu groß (+{diff} Wh, maximal erlaubt +{Max_Energiesprung_kommuliert*len(smartmeter_devices)} Wh) → verworfen.")
             energy_total = energy_last_total
 
         elif Max_Energiesprung > 0 and energy_total > energy_last_total + Max_Energiesprung*len(smartmeter_devices):
@@ -373,14 +373,27 @@ wenn alle Wechselrichter der DTU eine aktive Verbindung haben.
 Modbus TCP Server aktivieren:     aktiv (blau)
 Modbus TCP Serverstart verzögern: aktiv (blau)
 
-Falls ein Wechselrichter nicht erreichbar ist, liefert die DTU keine neuen Daten an den Fronius.
-Dadurch können positive Energiesprünge entstehen, welche mittels "Max_Energiesprung" begrenzt werden
+Fällt ein Wechselrichter kurzzeitig aus, stoppt die DTU die Datenübertragung.
+Beim nächsten Abruf meldet der GEN24 die in der Zwischenzeit erzeugte Energie auf einmal.
+Da GEN24 und die PV-Planung die Leistung aus den Differenzen der kumulierten Energie berechnen,
+können so Spitzen entstehen, die die Historie verfälschen.
+
+Max_Energiesprung glättet kurze Ausfälle oder Messfehler pro Smartmeter/Abruf
+Max_Energiesprung_kommuliert begrenzt die anrechenbare Energie für längere Offline-Zeiten.
+Fehlerhafte GEN24-Werte werden aussortiert.
+
+Überschreitet ein Smartmeter die "kommulierte" grenze nach einem längeren Ausfall,
+kann Max_Energiesprung_kommuliert z. B. um Faktor 10 erhöht werden,
+damit sich die PV-Planung schrittweise wieder an den tatsächlichen Wert annähert.
+So bleiben Historie und Leistungsberechnung plausibel.
 
 Bei mir kam es ebenfalls vor, dass die DTU beim Neustart zu wenig bisher produzierte Energie
-an den Fronius übertragen hat, was in der Historie für Chaos gesorgt hatte.
+an den Fronius übertragen hat, was in der Historie für Chaos sorgte.
 
 Im Zweifelsfall schalte ich den GEN24 kurz ab (oder trenne ihn vom Netzwerk).
-Solange der GEN24 offline ist, erhält er keine (fehlerhaften) Daten der DTU.
+Während der GEN24 offline ist, berechnet das Skript die fehlenden Energiewerte
+näherungsweise automatisch anhand der letzten Leistung (Stale-Mechanismus).
+Dadurch bleiben die Werte plausibel und große Sprünge werden verhindert.
 Wenn die DTU und alle Wechselrichter wieder stabil laufen, kann der GEN24 wieder online gehen.
 
 Die Sendeleistung der DTU zu verändern brachte bei mir nur geringfügige Verbesserungen.
