@@ -290,14 +290,14 @@ def get_API(data_temp):
             sm_power = sm_state["power_last"]
 
         # Stale Detection: Wenn ENERGY unverändert, aber Power größer 0 → nächster Energiewert wird berechnet
-        if sm_energy == sm_state["energy_last"] and sm_power > 60 and 8 <= now.hour < 20:
+        if sm_energy == sm_state["energy_last"] and sm_power > 60 and 7 <= now.hour < 20:
             sm_state["stale_count"] += 1
             print(f"{smartmeter_name}: unverändert, Zähler = {sm_state['stale_count']}, berechne neuen Wert")
             sm_energy = int(sm_state["energy_calc"] + (sm_power or 0) / 8)
             sm_state["energy_calc"] = sm_energy
 
         # Power_Last auf 0 setzen, wenn Smartmeter lange keine neuen Werte liefert oder außerhalb PV-Zeit
-        if sm_state["stale_count"] >= 16 or now.hour < 8 or now.hour >= 20:
+        if sm_state["stale_count"] >= 16 or now.hour < 7 or now.hour >= 20:
             if sm_state["power_last"] != 0:
                 sm_state["power_last"] = 0
                 print(f"{smartmeter_name}: Power_Last auf 0 gesetzt wegen längerem Stillstand oder außerhalb PV-Zeit")
