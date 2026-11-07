@@ -22,7 +22,7 @@ smartmeter_devices = [                       # Smartmeter-Device-Namen (neue GEN
 
 GEN24_IP = "192.168.178.42"                  # IP-Adresse des GEN24
 Leistung_WR = 7500                           # Leistung des größten Wechselrichters / Smartmeters
-Max_Energiesprung = int(Leistung_WR / 8)     # maximal zulässiger Energiesprung pro Abruf/Smartmeter (0 zum deakt.)
+Max_Energiesprung = int(Leistung_WR / 6)     # maximal zulässiger Energiesprung pro Abruf/Smartmeter
 Max_Energiesprung_kommuliert = Leistung_WR * 2      # tägliche Sicherheitsgrenze pro Smartmeter (0 zum deakt.)
 Wartezeit = 60                               # Wartezeit vor dem Direktabruf in Sekunden
 Summenpruefung_aktiv = 1                     # 1 = aktiv, 0 = deakt. (Prüfung mit Startwert bleibt immer erhalten)
@@ -293,7 +293,7 @@ def get_API(data_temp):
         if sm_energy == sm_state["energy_last"] and sm_power > 60 and 7 <= now.hour < 20:
             sm_state["stale_count"] += 1
             print(f"{smartmeter_name}: unverändert, Zähler = {sm_state['stale_count']}, berechne neuen Wert")
-            sm_energy = int(sm_state["energy_calc"] + (sm_power or 0) / 8)
+            sm_energy = int(sm_state["energy_calc"] + (sm_power or 0) / 6)
             sm_state["energy_calc"] = sm_energy
 
         # Power_Last auf 0 setzen, wenn Smartmeter lange keine neuen Werte liefert oder außerhalb PV-Zeit
@@ -309,11 +309,11 @@ def get_API(data_temp):
 
             if min_val <= sm_energy <= (max_val + Max_Energiesprung_kommuliert): # Wenn der Wert innerhalb der großen Toleranz liegt
                 sm_state["energy_last"] = sm_energy
-            elif (min_val - Max_Energiesprung/2) <= sm_energy:            # Wenn der Wert durch Fehler geringfügig kleiner ist
+            elif (min_val - Max_Energiesprung/2) <= sm_energy < min_val:  # Wenn der Wert durch Fehler geringfügig kleiner ist
                 sm_energy = max_val
             else:                                                         # Wenn der Wert falsch ist
                 old = sm_energy
-                sm_energy = int(max_val + sm_state["power_last"] / 8)
+                sm_energy = int(max_val + sm_state["power_last"] / 6)
                 print(f"{smartmeter_name}: Fehler Summenwert ({old}) → Fallback {sm_energy}")
 
         # ---------- energy_berechnet aktualisieren ----------
