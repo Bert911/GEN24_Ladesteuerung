@@ -23,7 +23,7 @@ smartmeter_devices = [                       # Smartmeter-Device-Namen (neue GEN
 
 GEN24_IP = "192.168.178.42"                  # IP-Adresse des GEN24
 Leistung_WR = 7500                           # Leistung des größten Wechselrichters / Smartmeters
-Aufrufe_je_Stunde = 6                        # 6 Aufrufe alle 10 Minuten
+Aufrufe_je_Stunde = 6                        # Anzahl der Skriptaufrufe pro Stunde
 Max_Energiesprung = Leistung_WR / Aufrufe_je_Stunde   # maximal zulässiger Energiesprung pro Abruf/Smartmeter
 Max_Energiesprung_kommuliert = Leistung_WR * 2        # tägliche Sicherheitsgrenze pro Smartmeter
 Wartezeit = 60                               # Wartezeit vor dem Direktabruf in Sekunden
